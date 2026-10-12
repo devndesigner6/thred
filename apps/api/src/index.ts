@@ -1,13 +1,13 @@
 import "dotenv/config";
 import { createHash, randomBytes } from "node:crypto";
 import express, { type NextFunction, type Request, type Response } from "express";
-import { prisma } from "@repo/db";
+import { clerkClient, clerkMiddleware, getAuth } from "@clerk/express";
+import { prisma, upsertLocalUser } from "@repo/db";
 import { mcpRouter } from "./mcp-routes.js";
 
 const app = express();
 const port = Number(process.env.PORT ?? 8080);
 const frontendOrigin = process.env.FRONTEND_ORIGIN ?? "http://localhost:3000";
-const authUrl = process.env.BETTER_AUTH_URL ?? "http://localhost:3000";
 const rateLimitWindowMs = 60_000;
 const rateLimitMaxRequests = 120;
 
@@ -18,6 +18,10 @@ type AuthenticatedRequest = Request & {
     user?: { id: string; email: string; name: string };
 };
 
+app.use(clerkMiddleware({
+    authorizedParties: [frontendOrigin],
+    ...(process.env.CLERK_JWT_KEY ? { jwtKey: process.env.CLERK_JWT_KEY } : {}),
+}));
 app.use(express.json());
 app.use((req, res, next) => {
     res.header("Access-Control-Allow-Origin", frontendOrigin);
@@ -60,25 +64,30 @@ app.use("/api", (req, res, next) => {
     next();
 });
 
-/** Validates the Better Auth session cookie before protected API handlers run. */
+/** Validates the Clerk session before protected API handlers run. */
 async function requireAuth(
     req: AuthenticatedRequest,
     res: Response,
     next: NextFunction,
 ) {
     try {
-        const sessionResponse = await fetch(`${authUrl}/api/auth/get-session`, {
-            headers: req.headers.cookie ? { cookie: req.headers.cookie } : {},
-        });
-        const session = (await sessionResponse.json()) as {
-            user?: { id: string; email: string; name: string };
-        } | null;
-
-        if (!sessionResponse.ok || !session?.user) {
+        const { isAuthenticated, userId } = getAuth(req);
+        if (!isAuthenticated || !userId) {
             return res.status(401).json({ error: "Unauthorized" });
         }
 
-        req.user = session.user;
+        const clerkUser = await clerkClient.users.getUser(userId);
+        const email = clerkUser.primaryEmailAddress?.emailAddress ?? clerkUser.emailAddresses[0]?.emailAddress;
+        if (!email) return res.status(401).json({ error: "Clerk user has no email address" });
+        const localUser = await upsertLocalUser({
+            clerkId: userId,
+            name: clerkUser.fullName?.trim() || clerkUser.username?.trim() || email.split("@")[0] || "Thred user",
+            email,
+            emailVerified: clerkUser.primaryEmailAddress?.verification?.status === "verified",
+            image: clerkUser.imageUrl,
+        });
+
+        req.user = { id: localUser.id, email: localUser.email, name: localUser.name };
         next();
     } catch (error) {
         next(error);

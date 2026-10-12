@@ -3,10 +3,10 @@
 import Link from "next/link";
 import Image from "next/image";
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { useUser } from "@clerk/nextjs";
 import { ArrowRight, ArrowUpRight } from "lucide-react";
 import { SiClaude, SiCline, SiCursor, SiModelcontextprotocol, SiWindsurf } from "react-icons/si";
 import { RiOpenaiFill } from "react-icons/ri";
-import { useSession } from "@/lib/auth-client";
 
 function ThreadMark({ className = "", bevel = false }: { className?: string; bevel?: boolean }) {
   // Unique per instance: a gradient inside a hidden copy can't paint visible ones.
@@ -174,7 +174,7 @@ function Testimonials() {
 }
 
 export default function Home() {
-  const { data: session } = useSession();
+  const { isSignedIn } = useUser();
 
   return (
     <main className="min-h-screen overflow-x-hidden bg-[#fcfcfb] text-[#171717]">
@@ -184,7 +184,7 @@ export default function Home() {
           thred
         </Link>
         <div className="flex items-center gap-5">
-          {session?.user ? <Link href="/dashboard" className="nav-link text-[13px] font-medium text-[#171717] hover:text-[#171717]">dashboard <ArrowRight className="inline size-3.5" strokeWidth={1.6} /></Link> : <Link href="/sign-in" className="nav-link text-[13px] font-medium text-[#171717] hover:text-[#171717]">sign in <ArrowRight className="inline size-3.5" strokeWidth={1.6} /></Link>}
+          {isSignedIn ? <Link href="/dashboard" className="nav-link text-[13px] font-medium text-[#171717] hover:text-[#171717]">dashboard <ArrowRight className="inline size-3.5" strokeWidth={1.6} /></Link> : <Link href="/sign-in" className="nav-link text-[13px] font-medium text-[#171717] hover:text-[#171717]">sign in <ArrowRight className="inline size-3.5" strokeWidth={1.6} /></Link>}
         </div>
       </nav>
 
@@ -198,7 +198,7 @@ export default function Home() {
             Thread gives Claude, Codex, and Cursor shared memory for decisions, revisions, and unfinished work, so the next agent starts where the last one stopped.
           </p>
           <div className="mt-7 flex flex-wrap items-center gap-x-5 gap-y-3">
-            <Link href={session?.user ? "/dashboard" : "/sign-in"} className="landing-cta inline-flex items-center gap-1.5 rounded-[5px] btn-ink px-4 py-2.5 text-[12px] font-medium">{session?.user ? "Open dashboard" : "Sign in"} <ArrowUpRight className="size-3" strokeWidth={1.7} /></Link>
+            <Link href={isSignedIn ? "/dashboard" : "/sign-in"} className="landing-cta inline-flex items-center gap-1.5 rounded-[5px] btn-ink px-4 py-2.5 text-[12px] font-medium">{isSignedIn ? "Open dashboard" : "Sign in"} <ArrowUpRight className="size-3" strokeWidth={1.7} /></Link>
             <a href="#mcp" className="landing-link inline-flex items-center gap-1.5 text-[12px] text-[#5f625d] hover:text-[#171717]">Explore MCP <ArrowRight className="size-3" strokeWidth={1.6} /></a>
           </div>
         </div>
@@ -207,7 +207,7 @@ export default function Home() {
             <DashboardFrame view="overview" title="Thred dashboard" visibleHeight={820} />
             <div className="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-b sm:h-32 from-transparent to-[#fcfcfb]" />
             <Link
-              href={session?.user ? "/dashboard" : "/sign-in"}
+              href={isSignedIn ? "/dashboard" : "/sign-in"}
               aria-label="Open the Thred dashboard"
               className="absolute inset-0 z-10"
             />
@@ -318,8 +318,8 @@ export default function Home() {
             <a href="#memory" className="landing-link text-[12px] text-[#5f625d] hover:text-[#171717]">Memory</a>
             <a href="#how-it-works" className="landing-link text-[12px] text-[#5f625d] hover:text-[#171717]">How it works</a>
             <a href="#mcp" className="landing-link text-[12px] text-[#5f625d] hover:text-[#171717]">MCP</a>
-            <a href="https://github.com/nikhil008-git/thred" target="_blank" rel="noreferrer" className="landing-link text-[12px] text-[#5f625d] hover:text-[#171717] inline-flex items-center gap-1">GitHub <ArrowUpRight className="size-3" strokeWidth={1.7} /></a>
-            <Link href={session?.user ? "/dashboard" : "/sign-in"} className="landing-link text-[12px] text-[#5f625d] hover:text-[#171717]">{session?.user ? "Dashboard" : "Sign in"}</Link>
+            <a href="https://github.com/devndesigner6/thred" target="_blank" rel="noreferrer" className="landing-link text-[12px] text-[#5f625d] hover:text-[#171717] inline-flex items-center gap-1">GitHub <ArrowUpRight className="size-3" strokeWidth={1.7} /></a>
+            <Link href={isSignedIn ? "/dashboard" : "/sign-in"} className="landing-link text-[12px] text-[#5f625d] hover:text-[#171717]">{isSignedIn ? "Dashboard" : "Sign in"}</Link>
           </nav>
         </div>
         <div className="mt-14 flex items-center justify-between px-6 text-[11px] text-[#9a9c96] sm:px-8">

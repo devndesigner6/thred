@@ -1,13 +1,12 @@
-import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { prisma } from "@repo/db";
-import { auth } from "@/lib/auth";
+import { getCurrentLocalUser } from "@/lib/current-user";
 
 export async function GET(_request: Request, context: { params: Promise<{ slug: string }> }) {
   const { slug } = await context.params;
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  const workspace = await prisma.workspace.findFirst({ where: { slug, ownerId: session.user.id } });
+  const user = await getCurrentLocalUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const workspace = await prisma.workspace.findFirst({ where: { slug, ownerId: user.id } });
   if (!workspace) return NextResponse.json({ error: "Workspace not found" }, { status: 404 });
   const [agentCount, checkpointCount, latestSessions, latestCheckpoints] = await Promise.all([
     prisma.agentSession.count({ where: { workspaceId: workspace.id } }),

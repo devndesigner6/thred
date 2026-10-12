@@ -1,19 +1,13 @@
-import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { prisma } from "@repo/db";
-import { auth } from "@/lib/auth";
+import { getCurrentLocalUser } from "@/lib/current-user";
 
 function slugify(value: string) {
   return value.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 48);
 }
 
-async function currentUser() {
-  const session = await auth.api.getSession({ headers: await headers() });
-  return session?.user ?? null;
-}
-
 export async function GET() {
-  const user = await currentUser();
+  const user = await getCurrentLocalUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const workspaces = await prisma.workspace.findMany({
     where: { ownerId: user.id },
@@ -24,7 +18,7 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const user = await currentUser();
+  const user = await getCurrentLocalUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const body = await request.json().catch(() => null) as { name?: unknown } | null;
   const name = typeof body?.name === "string" ? body.name.trim() : "";

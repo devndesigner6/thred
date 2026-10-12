@@ -1,13 +1,12 @@
 import { createHash, randomBytes } from "node:crypto";
-import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { prisma } from "@repo/db";
-import { auth } from "@/lib/auth";
+import { getCurrentLocalUser } from "@/lib/current-user";
 
 async function workspaceForRequest(slug: string) {
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session?.user) return null;
-  return prisma.workspace.findFirst({ where: { slug, ownerId: session.user.id } });
+  const user = await getCurrentLocalUser();
+  if (!user) return null;
+  return prisma.workspace.findFirst({ where: { slug, ownerId: user.id } });
 }
 
 export async function GET(_request: Request, context: { params: Promise<{ slug: string }> }) {

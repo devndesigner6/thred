@@ -28,6 +28,7 @@ enum EvalStrategy {
 
 model User {
   id               String            @id
+  clerkId          String?           @unique
   name             String
   email            String
   emailVerified    Boolean

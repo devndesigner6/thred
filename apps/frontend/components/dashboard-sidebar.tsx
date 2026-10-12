@@ -240,7 +240,7 @@ export function DashboardSidebar({
                   <span className="min-w-0 truncate">HydraDB memory</span>
                 </a>
                 <a
-                  href="https://github.com/nikhil008-git/thred"
+                  href="https://github.com/devndesigner6/thred"
                   target="_blank"
                   rel="noreferrer"
                   className="dashboard-sidebar-panel-row"

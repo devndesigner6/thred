@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
+import { ClerkProvider } from "@clerk/nextjs";
 import { LenisProvider } from "@/components/lenis-provider";
 import { Toaster } from "@/components/ui/toast";
 import "./globals.css";
 
-const siteUrl = process.env.NEXT_PUBLIC_BETTER_AUTH_URL ?? "https://www.thred.fun";
+const siteUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://www.thred.fun";
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
@@ -46,8 +47,10 @@ export default function RootLayout({
   return (
     <html lang="en" className="h-full antialiased">
       <body className="flex min-h-full flex-col">
-        <LenisProvider>{children}</LenisProvider>
-        <Toaster />
+        <ClerkProvider>
+          <LenisProvider>{children}</LenisProvider>
+          <Toaster />
+        </ClerkProvider>
       </body>
     </html>
   );

@@ -74,20 +74,21 @@ npm run db:migrate --workspace=@repo/db
 npm run dev
 ```
 
-**Prerequisites:** Node.js 18+, PostgreSQL, HydraDB API key, and Groq or OpenAI.
+**Prerequisites:** Node.js 18+, PostgreSQL, a Clerk application with Google enabled, a HydraDB API key, and Groq or OpenAI.
 
 | Variable                                   | Required for                    | Notes                                             |
 | ------------------------------------------ | ------------------------------- | ------------------------------------------------- |
 | `DATABASE_URL`                             | API, frontend, evaluations      | PostgreSQL connection string.                     |
 | `HYDRA_DB_API_KEY`                         | API, memory engine, evaluations | HydraDB access token.                             |
 | `OPENAI_API_KEY` or `GROQ_API_KEY`         | Extraction and evaluations      | Configure at least one provider.                  |
-| `BETTER_AUTH_SECRET`                       | Web authentication              | Signing/encryption secret.                        |
-| `BETTER_AUTH_URL`, `FRONTEND_ORIGIN`       | Web authentication              | Local defaults point to `http://localhost:3000`.  |
-| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Google sign-in                  | Required only when Google auth is enabled.        |
+| `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY` | Clerk authentication | Clerk application keys. |
+| `FRONTEND_ORIGIN`                          | Express API CORS and Clerk     | Local default is `http://localhost:3000`.         |
+| `CREDENTIAL_ENCRYPTION_SECRET`              | BYOK provider credentials      | Random secret with at least 32 characters.        |
 | `PORT`, `NEXT_PUBLIC_API_URL`              | Local development               | Optional API port and frontend API URL overrides. |
 
-For MCP clients, configure `THRED_API_KEY`; `THRED_API_URL` defaults to the
-production API.
+Configure Google as a social connection inside the Clerk dashboard. For MCP
+clients, configure `THRED_API_KEY`; `THRED_API_URL` defaults to the production
+API.
 
 ## How it works
 

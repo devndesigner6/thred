@@ -2,12 +2,13 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useSignIn, useUser } from "@clerk/nextjs";
 import { AuthPage } from "@/components/ui/auth-page";
-import { signIn, useSession } from "@/lib/auth-client";
 
 export default function SignInPage() {
   const router = useRouter();
-  const { data: session, isPending } = useSession();
+  const { isLoaded: isUserLoaded, isSignedIn } = useUser();
+  const { fetchStatus, signIn } = useSignIn();
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -21,8 +22,8 @@ export default function SignInPage() {
   };
 
   useEffect(() => {
-    if (!isPending && session?.user) router.replace("/dashboard");
-  }, [isPending, router, session?.user]);
+    if (isUserLoaded && isSignedIn) router.replace("/dashboard");
+  }, [isUserLoaded, isSignedIn, router]);
 
   useEffect(() => {
     warmApi();
@@ -33,10 +34,22 @@ export default function SignInPage() {
     setError(null);
     setIsSubmitting(true);
     warmApi();
-    const result = await signIn.social({ provider: "google", callbackURL: "/dashboard" });
-    if (result?.error) { setIsSubmitting(false); setError("Unable to start Google sign-in. Check the OAuth configuration and try again."); }
+    if (fetchStatus === "fetching" || !signIn) {
+      setIsSubmitting(false);
+      setError("Authentication is still loading. Please try again.");
+      return;
+    }
+    const result = await signIn.sso({
+      strategy: "oauth_google",
+      redirectCallbackUrl: "/sso-callback",
+      redirectUrl: "/dashboard",
+    });
+    if (result?.error) {
+      setIsSubmitting(false);
+      setError("Unable to start Google sign-in. Check the Clerk OAuth configuration and try again.");
+    }
   }
 
-  if (session?.user) return null;
+  if (isSignedIn) return null;
   return <AuthPage mode="sign-in" error={error} isSubmitting={isSubmitting} onSubmit={handleSubmit} />;
 }

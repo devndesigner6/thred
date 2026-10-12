@@ -4,6 +4,7 @@ import { Fragment, Suspense, useEffect, useId, useRef, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { useRouter, useSearchParams } from "next/navigation";
+import { useClerk, useUser } from "@clerk/nextjs";
 import { SiClaude, SiCursor } from "react-icons/si";
 import {
   PixelArrowRight,
@@ -15,7 +16,6 @@ import {
   PixelTrash,
   PixelMenu,
 } from "@/components/pixel-icons";
-import { signOut, useSession } from "@/lib/auth-client";
 import { DashboardSidebar } from "@/components/dashboard-sidebar";
 import { useClickOutside } from "@/lib/use-click-outside";
 import { toast } from "@/components/ui/toast";
@@ -922,7 +922,9 @@ function DashboardContent({
     previewView === "settings"
       ? previewView
       : "overview";
-  const { data: session, isPending } = useSession();
+  const { user, isLoaded } = useUser();
+  const { signOut } = useClerk();
+  const isPending = !isLoaded;
   const [workspaces, setWorkspaces] = useState<Workspace[]>(isHeroPreview ? [heroPreviewWorkspace] : []);
   const [workspace, setWorkspace] = useState<Workspace | null>(isHeroPreview ? heroPreviewWorkspace : null);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
@@ -949,16 +951,16 @@ function DashboardContent({
   const salutation =
     hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
   const firstName = (
-    session?.user?.name ??
-    session?.user?.email ??
-    (isHeroPreview ? "Nikhil" : "there")
+    user?.fullName ??
+    user?.primaryEmailAddress?.emailAddress ??
+    (isHeroPreview ? "Hemanth" : "there")
   )
     .split(" ")[0]
     .split("@")[0];
   const accountName =
-    session?.user?.name ??
-    session?.user?.email ??
-    (isHeroPreview ? "Nikhil Rajpurohit" : "");
+    user?.fullName ??
+    user?.primaryEmailAddress?.emailAddress ??
+    (isHeroPreview ? "Hemanth Peddada" : "");
   const request = (path: string, init?: RequestInit) =>
     fetch(path, {
       credentials: "include",
@@ -974,11 +976,11 @@ function DashboardContent({
       setLoading(false);
       return;
     }
-    if (!isPending && !session?.user) {
+    if (isLoaded && !user) {
       router.replace("/sign-in");
       return;
     }
-    if (!session?.user) return;
+    if (!user) return;
     void (async () => {
       const response = await request("/api/workspaces");
       if (response.ok) {
@@ -990,7 +992,7 @@ function DashboardContent({
       setLoading(false);
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isHeroPreview, isPending, session?.user?.id]);
+  }, [isHeroPreview, isPending, user?.id]);
 
   useEffect(() => {
     if (isHeroPreview) return;
@@ -1114,7 +1116,7 @@ function DashboardContent({
         workspaces={workspaces}
         onWorkspaceChange={setWorkspace}
         accountName={accountName}
-        accountEmail={session?.user?.name ? session.user.email : undefined}
+        accountEmail={user?.primaryEmailAddress?.emailAddress ?? undefined}
         sidebarWorkspaceOpen={sidebarWorkspaceOpen}
         setSidebarWorkspaceOpen={setSidebarWorkspaceOpen}
         sidebarWorkspaceRef={sidebarWorkspaceRef}
