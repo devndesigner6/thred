@@ -1,0 +1,23 @@
+{
+  "name": "@repo/memory-engine",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "check-types": "tsc --noEmit",
+    "test": "tsx --test \"src/**/*.test.ts\""
+  },
+  "dependencies": {
+    "@repo/hydra": "*",
+    "@repo/memory-extractor": "*",
+    "@repo/working-memory": "*"
+  },
+  "devDependencies": {
+    "@repo/typescript-config": "*",
+    "typescript": "5.9.2",
+    "tsx": "^4.21.0"
+  }
+}

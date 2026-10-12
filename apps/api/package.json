@@ -1,0 +1,24 @@
+{
+  "name": "api",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc -b",
+    "check-types": "tsc --noEmit"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "@repo/db": "*",
+    "@repo/memory-engine": "*",
+    "@repo/memory-extractor": "*",
+    "@types/express": "^5.0.6",
+    "dotenv": "^17.3.1",
+    "express": "^5.2.1",
+    "typescript": "^6.0.2",
+    "tsx": "^4.23.12"
+  }
+}

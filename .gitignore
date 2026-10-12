@@ -1,0 +1,47 @@
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+
+# Dependencies
+node_modules
+.pnp
+.pnp.js
+
+# Local env files
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Testing
+coverage
+
+# Turbo
+.turbo
+
+# Vercel
+.vercel
+
+# Build Outputs
+.next/
+out/
+build
+dist
+
+
+# Debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Generated evaluation logs and reports. Keep only the two curated evidence reports.
+/reports/
+/apps/evals/reports/*.md
+!/apps/evals/reports/longmemeval-2026-08-20T15-57-13-641Z.md
+!/apps/evals/reports/longmemeval-v2-2026-08-20T19-04-43-101Z.md
+
+# Local Cursor notes (latency plan, scratch)
+.cursor/
+
+# Misc
+.DS_Store
+*.pem

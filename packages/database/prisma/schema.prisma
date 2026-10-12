@@ -1,0 +1,208 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum AgentKind {
+  CODEX
+  CLAUDE
+  CURSOR
+  HERMES
+  OTHER
+}
+
+enum CheckpointStatus {
+  IN_PROGRESS
+  BLOCKED
+  DONE
+}
+
+enum EvalStrategy {
+  VECTOR_RAG
+  THRED
+}
+
+model User {
+  id               String            @id
+  name             String
+  email            String
+  emailVerified    Boolean
+  image            String?
+  createdAt        DateTime
+  updatedAt        DateTime
+  sessions         Session[]
+  accounts         Account[]
+  workspaces       Workspace[]
+
+  @@unique([email])
+  @@map("user")
+}
+
+model Session {
+  id        String   @id
+  expiresAt DateTime
+  token     String
+  createdAt DateTime
+  updatedAt DateTime
+  ipAddress String?
+  userAgent String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([token])
+  @@map("session")
+}
+
+model Account {
+  id                    String    @id
+  accountId             String
+  providerId            String
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime
+  updatedAt             DateTime
+
+  @@map("account")
+}
+
+model Verification {
+  id         String    @id
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime?
+  updatedAt  DateTime?
+
+  @@map("verification")
+}
+
+model Workspace {
+  id          String              @id @default(cuid())
+  name        String
+  slug        String              @unique()
+  ownerId     String
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+  owner       User                @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  apiKeys     ApiKey[]
+  sessions    AgentSession[]
+  checkpoints WorkingCheckpoint[]
+  evalRuns    EvalRun[]
+  providerCredentials ProviderCredential[]
+
+  @@index([ownerId])
+}
+
+model ProviderCredential {
+  id           String   @id @default(cuid())
+  workspaceId  String
+  provider     String
+  label        String
+  model        String
+  baseUrl      String?
+  encryptedKey String
+  keyHint      String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  workspace    Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, provider])
+  @@index([workspaceId])
+}
+
+model ApiKey {
+  id          String    @id @default(cuid())
+  workspaceId String
+  name        String
+  keyPrefix   String
+  keyHash     String    @unique()
+  lastUsedAt  DateTime?
+  expiresAt   DateTime?
+  createdAt   DateTime  @default(now())
+  revokedAt   DateTime?
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+}
+
+model AgentSession {
+  id           String              @id @default(cuid())
+  workspaceId  String
+  agent        AgentKind
+  externalId   String?
+  startedAt    DateTime            @default(now())
+  endedAt      DateTime?
+  workspace    Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  checkpoints  WorkingCheckpoint[]
+
+  @@index([workspaceId, startedAt])
+}
+
+model WorkingCheckpoint {
+  id             String           @id @default(cuid())
+  workspaceId    String
+  sessionId      String
+  taskKey        String
+  task           String
+  status         CheckpointStatus
+  payload        Json
+  hydraMemoryIds String[]         @default([])
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  workspace      Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  session        AgentSession     @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, taskKey, updatedAt])
+  @@index([sessionId])
+}
+
+model EvalRun {
+  id          String       @id @default(cuid())
+  workspaceId String
+  dataset     String
+  strategy    EvalStrategy
+  answerModel String
+  config      Json
+  startedAt   DateTime     @default(now())
+  completedAt DateTime?
+  workspace   Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  results     EvalCaseResult[]
+
+  @@index([workspaceId, dataset, startedAt])
+}
+
+model EvalCaseResult {
+  id                 String   @id @default(cuid())
+  evalRunId          String
+  caseId             String
+  question           String
+  expectedAnswer     String?
+  answer             String?
+  shouldAbstain      Boolean  @default(false)
+  abstained          Boolean  @default(false)
+  answerCorrect      Boolean?
+  temporalCorrect    Boolean?
+  revisionCorrect    Boolean?
+  abstentionCorrect  Boolean?
+  writeTokens        Int      @default(0)
+  readTokens         Int      @default(0)
+  ingestLatencyMs    Int      @default(0)
+  retrievalLatencyMs Int      @default(0)
+  evidence           Json
+  createdAt          DateTime @default(now())
+  evalRun            EvalRun  @relation(fields: [evalRunId], references: [id], onDelete: Cascade)
+
+  @@unique([evalRunId, caseId])
+  @@index([caseId])
+}
