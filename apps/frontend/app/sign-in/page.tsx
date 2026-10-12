@@ -2,13 +2,13 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useSignIn, useUser } from "@clerk/nextjs";
 import { AuthPage } from "@/components/ui/auth-page";
+import { useOptionalSignIn, useOptionalUser } from "@/lib/clerk-safe";
 
 export default function SignInPage() {
   const router = useRouter();
-  const { isLoaded: isUserLoaded, isSignedIn } = useUser();
-  const { fetchStatus, signIn } = useSignIn();
+  const { isLoaded: isUserLoaded, isSignedIn } = useOptionalUser();
+  const { fetchStatus, signIn } = useOptionalSignIn();
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 

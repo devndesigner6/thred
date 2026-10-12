@@ -5,6 +5,7 @@ import { Toaster } from "@/components/ui/toast";
 import "./globals.css";
 
 const siteUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://www.thred.fun";
+const clerkPublishableKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
@@ -47,10 +48,17 @@ export default function RootLayout({
   return (
     <html lang="en" className="h-full antialiased">
       <body className="flex min-h-full flex-col">
-        <ClerkProvider>
-          <LenisProvider>{children}</LenisProvider>
-          <Toaster />
-        </ClerkProvider>
+        {clerkPublishableKey ? (
+          <ClerkProvider publishableKey={clerkPublishableKey}>
+            <LenisProvider>{children}</LenisProvider>
+            <Toaster />
+          </ClerkProvider>
+        ) : (
+          <>
+            <LenisProvider>{children}</LenisProvider>
+            <Toaster />
+          </>
+        )}
       </body>
     </html>
   );

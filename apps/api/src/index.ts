@@ -8,6 +8,7 @@ import { mcpRouter } from "./mcp-routes.js";
 const app = express();
 const port = Number(process.env.PORT ?? 8080);
 const frontendOrigin = process.env.FRONTEND_ORIGIN ?? "http://localhost:3000";
+const clerkConfigured = Boolean(process.env.CLERK_PUBLISHABLE_KEY && process.env.CLERK_SECRET_KEY);
 const rateLimitWindowMs = 60_000;
 const rateLimitMaxRequests = 120;
 
@@ -18,10 +19,12 @@ type AuthenticatedRequest = Request & {
     user?: { id: string; email: string; name: string };
 };
 
-app.use(clerkMiddleware({
-    authorizedParties: [frontendOrigin],
-    ...(process.env.CLERK_JWT_KEY ? { jwtKey: process.env.CLERK_JWT_KEY } : {}),
-}));
+if (clerkConfigured) {
+    app.use(clerkMiddleware({
+        authorizedParties: [frontendOrigin],
+        ...(process.env.CLERK_JWT_KEY ? { jwtKey: process.env.CLERK_JWT_KEY } : {}),
+    }));
+}
 app.use(express.json());
 app.use((req, res, next) => {
     res.header("Access-Control-Allow-Origin", frontendOrigin);
@@ -71,6 +74,9 @@ async function requireAuth(
     next: NextFunction,
 ) {
     try {
+        if (!clerkConfigured) {
+            return res.status(503).json({ error: "Authentication is not configured" });
+        }
         const { isAuthenticated, userId } = getAuth(req);
         if (!isAuthenticated || !userId) {
             return res.status(401).json({ error: "Unauthorized" });

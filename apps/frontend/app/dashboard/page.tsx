@@ -4,7 +4,6 @@ import { Fragment, Suspense, useEffect, useId, useRef, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useClerk, useUser } from "@clerk/nextjs";
 import { SiClaude, SiCursor } from "react-icons/si";
 import {
   PixelArrowRight,
@@ -19,6 +18,7 @@ import {
 import { DashboardSidebar } from "@/components/dashboard-sidebar";
 import { useClickOutside } from "@/lib/use-click-outside";
 import { toast } from "@/components/ui/toast";
+import { useOptionalClerk, useOptionalUser } from "@/lib/clerk-safe";
 
 const MCP_PACKAGE = "@thred_nick_01/thred-mcp";
 const DEFAULT_PRODUCTION_MCP_API_URL = "https://api.thred.fun";
@@ -922,8 +922,8 @@ function DashboardContent({
     previewView === "settings"
       ? previewView
       : "overview";
-  const { user, isLoaded } = useUser();
-  const { signOut } = useClerk();
+  const { user, isLoaded } = useOptionalUser();
+  const { signOut } = useOptionalClerk();
   const isPending = !isLoaded;
   const [workspaces, setWorkspaces] = useState<Workspace[]>(isHeroPreview ? [heroPreviewWorkspace] : []);
   const [workspace, setWorkspace] = useState<Workspace | null>(isHeroPreview ? heroPreviewWorkspace : null);

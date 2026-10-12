@@ -2,13 +2,13 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useUser } from "@clerk/nextjs";
 import { AuthPage } from "@/components/ui/auth-page";
+import { useOptionalUser } from "@/lib/clerk-safe";
 
 /** The post-login onboarding step deliberately reuses the split auth composition. */
 export default function WorkspaceOnboardingPage() {
   const router = useRouter();
-  const { isLoaded, isSignedIn } = useUser();
+  const { isLoaded, isSignedIn } = useOptionalUser();
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 

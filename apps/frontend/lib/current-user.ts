@@ -2,6 +2,9 @@ import { currentUser as clerkCurrentUser, auth } from "@clerk/nextjs/server";
 import { upsertLocalUser } from "@repo/db";
 
 export async function getCurrentLocalUser() {
+  if (!process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY || !process.env.CLERK_SECRET_KEY) {
+    return null;
+  }
   const { userId } = await auth();
   if (!userId) return null;
 

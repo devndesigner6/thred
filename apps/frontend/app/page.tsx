@@ -3,7 +3,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
-import { useUser } from "@clerk/nextjs";
+import { useOptionalUser } from "@/lib/clerk-safe";
 import { ArrowRight, ArrowUpRight } from "lucide-react";
 import { SiClaude, SiCline, SiCursor, SiModelcontextprotocol, SiWindsurf } from "react-icons/si";
 import { RiOpenaiFill } from "react-icons/ri";
@@ -174,7 +174,7 @@ function Testimonials() {
 }
 
 export default function Home() {
-  const { isSignedIn } = useUser();
+  const { isSignedIn } = useOptionalUser();
 
   return (
     <main className="min-h-screen overflow-x-hidden bg-[#fcfcfb] text-[#171717]">
