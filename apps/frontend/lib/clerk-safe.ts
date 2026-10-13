@@ -1,4 +1,4 @@
-import { useClerk, useSignIn, useUser } from "@clerk/nextjs";
+import { useAuth, useClerk, useSignIn, useUser } from "@clerk/nextjs";
 
 export const clerkConfigured = Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY);
 
@@ -17,4 +17,9 @@ export function useOptionalSignIn() {
 export function useOptionalClerk() {
   if (!clerkConfigured) return { signOut: async () => undefined };
   return useClerk();
+}
+
+export function useOptionalAuth() {
+  if (!clerkConfigured) return { getToken: async () => null };
+  return useAuth();
 }

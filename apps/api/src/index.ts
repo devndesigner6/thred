@@ -1,5 +1,5 @@
 import "dotenv/config";
-import { createHash, randomBytes } from "node:crypto";
+import { createCipheriv, createHash, randomBytes } from "node:crypto";
 import express, { type NextFunction, type Request, type Response } from "express";
 import { clerkClient, clerkMiddleware, getAuth } from "@clerk/express";
 import { prisma, upsertLocalUser } from "@repo/db";
@@ -118,6 +118,23 @@ function param(req: Request, name: string): string {
     return typeof value === "string" ? value : "";
 }
 
+const supportedProviders = new Set(["openai", "groq", "xai", "openrouter", "ollama", "custom"]);
+
+function credentialEncryptionKey() {
+    const secret = process.env.CREDENTIAL_ENCRYPTION_SECRET ?? process.env.BETTER_AUTH_SECRET;
+    if (!secret || secret.length < 32) {
+        throw new Error("CREDENTIAL_ENCRYPTION_SECRET must be at least 32 characters");
+    }
+    return createHash("sha256").update(secret).digest();
+}
+
+function encryptProviderKey(value: string) {
+    const iv = randomBytes(12);
+    const cipher = createCipheriv("aes-256-gcm", credentialEncryptionKey(), iv);
+    const ciphertext = Buffer.concat([cipher.update(value, "utf8"), cipher.final()]);
+    return `${iv.toString("base64url")}.${ciphertext.toString("base64url")}.${cipher.getAuthTag().toString("base64url")}`;
+}
+
 async function workspaceForUser(userId: string, slug: string) {
     return prisma.workspace.findFirst({
         where: { slug, ownerId: userId },
@@ -153,6 +170,25 @@ app.post("/api/workspaces", requireAuth, async (req: AuthenticatedRequest, res, 
     } catch (error) { next(error); }
 });
 
+/** Renames a workspace without changing its stable MCP slug. */
+app.patch("/api/workspaces/:slug", requireAuth, async (req: AuthenticatedRequest, res, next) => {
+    try {
+        const slug = param(req, "slug");
+        const name = typeof req.body?.name === "string" ? req.body.name.trim() : "";
+        if (!name || name.length > 80) {
+            return res.status(400).json({ error: "Use a workspace name between 1 and 80 characters." });
+        }
+        const workspace = await workspaceForUser(req.user!.id, slug);
+        if (!workspace) return res.status(404).json({ error: "Workspace not found" });
+        const updated = await prisma.workspace.update({
+            where: { id: workspace.id },
+            data: { name },
+            select: { id: true, name: true, slug: true },
+        });
+        res.json({ workspace: updated });
+    } catch (error) { next(error); }
+});
+
 /** Dashboard data stays operational: checkpoints/evals live in Postgres; durable memory remains in HydraDB. */
 app.get("/api/workspaces/:slug/overview", requireAuth, async (req: AuthenticatedRequest, res, next) => {
     try {
@@ -160,13 +196,65 @@ app.get("/api/workspaces/:slug/overview", requireAuth, async (req: Authenticated
         if (!slug) return res.status(400).json({ error: "Workspace slug is required" });
         const workspace = await workspaceForUser(req.user!.id, slug);
         if (!workspace) return res.status(404).json({ error: "Workspace not found" });
-        const [sessionCount, checkpointCount, latestCheckpoints, latestEvals] = await Promise.all([
+        const [agentCount, checkpointCount, latestSessions, latestCheckpoints] = await Promise.all([
             prisma.agentSession.count({ where: { workspaceId: workspace.id } }),
-            prisma.workingCheckpoint.count({ where: { workspaceId: workspace.id } }),
-            prisma.workingCheckpoint.findMany({ where: { workspaceId: workspace.id }, orderBy: { updatedAt: "desc" }, take: 5, select: { id: true, task: true, status: true, updatedAt: true, payload: true } }),
-            prisma.evalRun.findMany({ where: { workspaceId: workspace.id }, orderBy: { startedAt: "desc" }, take: 3, select: { id: true, dataset: true, strategy: true, startedAt: true, completedAt: true, _count: { select: { results: true } } } }),
+            prisma.workingCheckpoint.count({ where: { workspaceId: workspace.id, status: { in: ["IN_PROGRESS", "BLOCKED"] } } }),
+            prisma.agentSession.findMany({ where: { workspaceId: workspace.id }, orderBy: { startedAt: "desc" }, take: 3, select: { id: true, agent: true, startedAt: true, endedAt: true } }),
+            prisma.workingCheckpoint.findMany({ where: { workspaceId: workspace.id, status: { in: ["IN_PROGRESS", "BLOCKED"] } }, orderBy: { updatedAt: "desc" }, take: 3, select: { id: true, task: true, status: true, updatedAt: true, payload: true, session: { select: { agent: true } } } }),
         ]);
-        res.json({ workspace, metrics: { sessionCount, checkpointCount }, latestCheckpoints, latestEvals });
+        res.json({ metrics: { agentCount, checkpointCount }, latestSessions, latestCheckpoints });
+    } catch (error) { next(error); }
+});
+
+/** Lists safe metadata for workspace model-provider credentials. */
+app.get("/api/workspaces/:slug/providers", requireAuth, async (req: AuthenticatedRequest, res, next) => {
+    try {
+        const workspace = await workspaceForUser(req.user!.id, param(req, "slug"));
+        if (!workspace) return res.status(404).json({ error: "Workspace not found" });
+        const providers = await prisma.providerCredential.findMany({
+            where: { workspaceId: workspace.id },
+            orderBy: { updatedAt: "desc" },
+            select: { id: true, provider: true, label: true, model: true, baseUrl: true, keyHint: true, createdAt: true, updatedAt: true },
+        });
+        res.json({ providers });
+    } catch (error) { next(error); }
+});
+
+/** Saves an encrypted model-provider key without ever returning the secret. */
+app.put("/api/workspaces/:slug/providers", requireAuth, async (req: AuthenticatedRequest, res, next) => {
+    try {
+        const workspace = await workspaceForUser(req.user!.id, param(req, "slug"));
+        if (!workspace) return res.status(404).json({ error: "Workspace not found" });
+        const provider = typeof req.body?.provider === "string" ? req.body.provider.trim().toLowerCase() : "";
+        const key = typeof req.body?.key === "string" ? req.body.key.trim() : "";
+        const model = typeof req.body?.model === "string" ? req.body.model.trim() : "";
+        const label = typeof req.body?.label === "string" && req.body.label.trim() ? req.body.label.trim().slice(0, 80) : provider;
+        const baseUrl = typeof req.body?.baseUrl === "string" && req.body.baseUrl.trim() ? req.body.baseUrl.trim().replace(/\/$/, "") : null;
+        if (!supportedProviders.has(provider) || !model || (!["custom", "ollama"].includes(provider) && !key)) {
+            return res.status(400).json({ error: "Provider, model, and API key are required (except Ollama/custom local endpoints)." });
+        }
+        if (baseUrl && !/^https?:\/\//i.test(baseUrl)) {
+            return res.status(400).json({ error: "Base URL must start with http:// or https://" });
+        }
+        const saved = await prisma.providerCredential.upsert({
+            where: { workspaceId_provider: { workspaceId: workspace.id, provider } },
+            create: { workspaceId: workspace.id, provider, label, model, baseUrl, encryptedKey: encryptProviderKey(key || "local"), keyHint: key ? `…${key.slice(-4)}` : "local" },
+            update: { label, model, baseUrl, ...(key ? { encryptedKey: encryptProviderKey(key), keyHint: `…${key.slice(-4)}` } : {}) },
+            select: { id: true, provider: true, label: true, model: true, baseUrl: true, keyHint: true, createdAt: true, updatedAt: true },
+        });
+        res.json({ provider: saved });
+    } catch (error) { next(error); }
+});
+
+/** Removes the selected workspace provider and its encrypted key. */
+app.delete("/api/workspaces/:slug/providers", requireAuth, async (req: AuthenticatedRequest, res, next) => {
+    try {
+        const workspace = await workspaceForUser(req.user!.id, param(req, "slug"));
+        if (!workspace) return res.status(404).json({ error: "Workspace not found" });
+        const provider = typeof req.query.provider === "string" ? req.query.provider.trim().toLowerCase() : "";
+        if (!provider || !supportedProviders.has(provider)) return res.status(400).json({ error: "Unknown provider" });
+        await prisma.providerCredential.deleteMany({ where: { workspaceId: workspace.id, provider } });
+        res.json({ ok: true });
     } catch (error) { next(error); }
 });
 

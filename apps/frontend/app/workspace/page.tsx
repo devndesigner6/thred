@@ -3,12 +3,13 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AuthPage } from "@/components/ui/auth-page";
-import { useOptionalUser } from "@/lib/clerk-safe";
+import { useOptionalAuth, useOptionalUser } from "@/lib/clerk-safe";
 
 /** The post-login onboarding step deliberately reuses the split auth composition. */
 export default function WorkspaceOnboardingPage() {
   const router = useRouter();
   const { isLoaded, isSignedIn } = useOptionalUser();
+  const { getToken } = useOptionalAuth();
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -21,10 +22,15 @@ export default function WorkspaceOnboardingPage() {
     setError(null);
     setIsSubmitting(true);
     const form = new FormData(event.currentTarget);
-    const response = await fetch("/api/workspaces", {
+    const apiBaseUrl = (process.env.NEXT_PUBLIC_API_URL ?? "").replace(/\/$/, "");
+    const token = await getToken().catch(() => null);
+    const response = await fetch(`${apiBaseUrl}/api/workspaces`, {
       method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
+      credentials: apiBaseUrl ? "omit" : "include",
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
       body: JSON.stringify({ name: form.get("workspaceName") }),
     });
     setIsSubmitting(false);

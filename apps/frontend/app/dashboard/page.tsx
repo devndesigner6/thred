@@ -18,7 +18,7 @@ import {
 import { DashboardSidebar } from "@/components/dashboard-sidebar";
 import { useClickOutside } from "@/lib/use-click-outside";
 import { toast } from "@/components/ui/toast";
-import { useOptionalClerk, useOptionalUser } from "@/lib/clerk-safe";
+import { useOptionalAuth, useOptionalClerk, useOptionalUser } from "@/lib/clerk-safe";
 
 const MCP_PACKAGE = "@thred_nick_01/thred-mcp";
 const DEFAULT_PRODUCTION_MCP_API_URL = "https://api.thred.fun";
@@ -924,6 +924,7 @@ function DashboardContent({
       : "overview";
   const { user, isLoaded } = useOptionalUser();
   const { signOut } = useOptionalClerk();
+  const { getToken } = useOptionalAuth();
   const isPending = !isLoaded;
   const [workspaces, setWorkspaces] = useState<Workspace[]>(isHeroPreview ? [heroPreviewWorkspace] : []);
   const [workspace, setWorkspace] = useState<Workspace | null>(isHeroPreview ? heroPreviewWorkspace : null);
@@ -961,12 +962,19 @@ function DashboardContent({
     user?.fullName ??
     user?.primaryEmailAddress?.emailAddress ??
     (isHeroPreview ? "Hemanth Peddada" : "");
-  const request = (path: string, init?: RequestInit) =>
-    fetch(path, {
-      credentials: "include",
-      headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
+  const request = async (path: string, init?: RequestInit) => {
+    const apiBaseUrl = (process.env.NEXT_PUBLIC_API_URL ?? "").replace(/\/$/, "");
+    const token = await getToken().catch(() => null);
+    return fetch(`${apiBaseUrl}${path}`, {
+      credentials: apiBaseUrl ? "omit" : "include",
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(init?.headers ?? {}),
+      },
       ...init,
     });
+  };
 
   useEffect(() => {
     if (isHeroPreview) {
