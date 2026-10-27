@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { lookup } from "node:dns/promises";
 import {
   defineAgentModule,
   defineRuntime,
@@ -20,6 +21,8 @@ type Finding = {
   text: string;
   createdAt: string;
   memoryId?: string;
+  sourceUrl?: string;
+  sourceTitle?: string;
 };
 
 type RunRecord = {
@@ -31,7 +34,7 @@ type RunRecord = {
   finishedAt?: string;
   error?: string;
   finalAnswer?: string;
-  agents: Record<AgentKey, { status: AgentStatus; answer?: string; structured?: Record<string, unknown>; error?: string }>;
+  agents: Record<AgentKey, { status: AgentStatus; currentAction?: string; toolCalls: number; findingCount: number; memoryWriteCount: number; answer?: string; structured?: Record<string, unknown>; error?: string }>;
   findings: Finding[];
   memoryWrites: Array<{ agent: AgentKey; text: string; memoryId?: string; createdAt: string }>;
   events: Array<{ type: string; agent?: AgentKey; detail: string; createdAt: string }>;
@@ -82,6 +85,21 @@ function event(run: RunRecord, type: string, detail: string, agent?: AgentKey) {
   void prisma.mozaikEvent.create({ data: { runId: run.id, type, detail, ...(agent ? { agent } : {}) } }).catch(() => undefined);
 }
 
+function agentAction(run: RunRecord, agent: AgentKey, action: string) {
+  run.agents[agent].currentAction = action;
+}
+
+function publicUrl(value: unknown) {
+  if (typeof value !== "string") throw new Error("A public http(s) URL is required");
+  const url = new URL(value);
+  if (!/^https?:$/.test(url.protocol)) throw new Error("Only http(s) URLs are supported");
+  const hostname = url.hostname.toLowerCase();
+  if (["localhost", "127.0.0.1", "0.0.0.0", "::1"].includes(hostname) || hostname.endsWith(".local")) {
+    throw new Error("Private and local hosts are not allowed");
+  }
+  return url;
+}
+
 function toolSchema(properties: Record<string, unknown>, required: string[]) {
   return {
     type: "object",
@@ -99,6 +117,8 @@ function buildTools(run: RunRecord, state: RunSharedState, agent: AgentKey): Too
     parameters: toolSchema({ query: { type: "string" } }, ["query"]),
     strict: true,
     invoke: async ({ query }: { query: string }) => {
+      run.agents[agent].toolCalls += 1;
+      agentAction(run, agent, `Searching Thred memory for “${query}”`);
       event(run, "memory.read", `Searching durable memory for: ${query}`, agent);
       if (!process.env.HYDRA_DB_API_KEY) return { matches: [], note: "HYDRA_DB_API_KEY is not configured" };
       const result = await recallLongTermMemory({ workspaceId: run.workspaceId, query, maxResults: 6 });
@@ -113,6 +133,8 @@ function buildTools(run: RunRecord, state: RunSharedState, agent: AgentKey): Too
     parameters: toolSchema({}, []),
     strict: true,
     invoke: async () => {
+      run.agents[agent].toolCalls += 1;
+      agentAction(run, agent, "Reading the shared Thred board");
       event(run, "board.read", `Read ${state.board.length} shared findings`, agent);
       return { findings: state.board };
     },
@@ -122,13 +144,16 @@ function buildTools(run: RunRecord, state: RunSharedState, agent: AgentKey): Too
     type: "function",
     name: "thred_publish_finding",
     description: "Publish a concise finding to the shared board so other agents can build on it.",
-    parameters: toolSchema({ text: { type: "string" } }, ["text"]),
+    parameters: toolSchema({ text: { type: "string" }, sourceUrl: { type: ["string", "null"] } }, ["text", "sourceUrl"]),
     strict: true,
-    invoke: async ({ text }: { text: string }) => {
-      const finding = { agent, text: text.trim().slice(0, 1800), createdAt: now() } satisfies Finding;
+    invoke: async ({ text, sourceUrl }: { text: string; sourceUrl?: string }) => {
+      run.agents[agent].toolCalls += 1;
+      run.agents[agent].findingCount += 1;
+      agentAction(run, agent, "Publishing evidence to the shared board");
+      const finding = { agent, text: text.trim().slice(0, 1800), createdAt: now(), ...(sourceUrl ? { sourceUrl: sourceUrl.slice(0, 500) } : {}) } satisfies Finding;
       state.board.push(finding);
       run.findings.push(finding);
-      void prisma.mozaikFinding.create({ data: { runId: run.id, agent, text: finding.text } }).catch(() => undefined);
+      void prisma.mozaikFinding.create({ data: { runId: run.id, agent, text: finding.text, ...(finding.sourceUrl ? { sourceUrl: finding.sourceUrl } : {}) } }).catch(() => undefined);
       event(run, "finding.published", finding.text, agent);
       return { published: true, finding };
     },
@@ -147,6 +172,9 @@ function buildTools(run: RunRecord, state: RunSharedState, agent: AgentKey): Too
     ),
     strict: true,
     invoke: async ({ text, kind }: { text: string; kind: "fact" | "decision" | "lesson" | "architecture" | "preference" }) => {
+      run.agents[agent].toolCalls += 1;
+      run.agents[agent].memoryWriteCount += 1;
+      agentAction(run, agent, `Writing a durable ${kind} memory`);
       const clean = text.trim().slice(0, 1800);
       if (!process.env.HYDRA_DB_API_KEY) {
         event(run, "memory.write.skipped", "HydraDB key is not configured", agent);
@@ -166,7 +194,54 @@ function buildTools(run: RunRecord, state: RunSharedState, agent: AgentKey): Too
     },
   };
 
-  return [readMemory, readBoard, publishFinding, writeMemory];
+  const fetchUrl: Tool = {
+    type: "function",
+    name: "thred_fetch_public_url",
+    description: "Fetch a public webpage for primary evidence. Use this for domain or website research; return the URL, status, title, and a bounded text excerpt.",
+    parameters: toolSchema({ url: { type: "string" } }, ["url"]),
+    strict: true,
+    invoke: async ({ url: value }: { url: string }) => {
+      run.agents[agent].toolCalls += 1;
+      agentAction(run, agent, `Fetching primary evidence from ${value}`);
+      const url = publicUrl(value);
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 8000);
+      try {
+        const response = await fetch(url, { signal: controller.signal, redirect: "follow", headers: { "user-agent": "Thred-Mozaik/1.0" } });
+        const body = (await response.text()).replace(/\s+/g, " ").trim().slice(0, 7000);
+        const title = body.match(/<title[^>]*>(.*?)<\/title>/i)?.[1]?.trim().slice(0, 240);
+        event(run, "source.fetched", `${response.status} ${url.href}`, agent);
+        return { url: url.href, status: response.status, title: title ?? null, excerpt: body.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 5000) };
+      } finally {
+        clearTimeout(timeout);
+      }
+    },
+  };
+
+  const dnsLookup: Tool = {
+    type: "function",
+    name: "thred_lookup_dns",
+    description: "Resolve public DNS records for a domain and report the addresses or failure as evidence.",
+    parameters: toolSchema({ domain: { type: "string" } }, ["domain"]),
+    strict: true,
+    invoke: async ({ domain }: { domain: string }) => {
+      run.agents[agent].toolCalls += 1;
+      agentAction(run, agent, `Checking DNS for ${domain}`);
+      const host = domain.trim().replace(/^https?:\/\//, "").split("/")[0];
+      if (!host || host.includes(" ") || host === "localhost") throw new Error("A public domain is required");
+      try {
+        const records = await lookup(host, { all: true });
+        event(run, "source.dns", `${host} resolved to ${records.map((item) => item.address).join(", ")}`, agent);
+        return { domain: host, records };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "DNS lookup failed";
+        event(run, "source.dns.failed", `${host}: ${message}`, agent);
+        return { domain: host, records: [], error: message };
+      }
+    },
+  };
+
+  return [readMemory, readBoard, fetchUrl, dnsLookup, publishFinding, writeMemory];
 }
 
 const roles: Array<{ key: AgentKey; name: string; instruction: string }> = [
@@ -174,19 +249,19 @@ const roles: Array<{ key: AgentKey; name: string; instruction: string }> = [
     key: "researcher",
     name: "Researcher",
     instruction:
-      "You are the Researcher. Investigate the user's goal using Thred recall first. Separate known facts from assumptions. Publish your strongest evidence to the shared board and write one durable fact when useful.",
+      "You are the Researcher. Investigate the user's goal using Thred recall first, then use public URL fetch and DNS tools when the goal names a website or domain. Separate verified facts from assumptions, cite the source URL in findings, publish your strongest evidence, and write one durable fact when useful.",
   },
   {
     key: "architect",
     name: "Architect",
     instruction:
-      "You are the Architect. Work concurrently with the other agents. Read the shared board, turn evidence into a practical plan, call out dependencies and tradeoffs, publish the plan, and write a durable decision.",
+      "You are the Architect. Work concurrently with the other agents. Read Thred memory and the shared board, use public evidence tools when they can validate the goal, turn evidence into a practical plan, call out dependencies and tradeoffs, publish the plan, and write a durable decision.",
   },
   {
     key: "critic",
     name: "Critic",
     instruction:
-      "You are the Critic. Work concurrently, inspect Thred memory and the shared board, challenge weak claims, identify risks, and publish a concise recommendation. Write a durable lesson if you find one.",
+      "You are the Critic. Work concurrently, inspect Thred memory and the shared board, independently check important public claims when possible, challenge weak claims, identify risks, and publish a concise recommendation. Write a durable lesson if you find one.",
   },
 ];
 
@@ -280,7 +355,11 @@ export async function getMozaikRun(runId: string) {
   });
   if (!persisted) throw new Error("Mozaik run not found");
   const payload = persisted.finalAnswer && typeof persisted.finalAnswer === "object" ? persisted.finalAnswer as Record<string, any> : {};
-  const fallbackAgents = { researcher: { status: persisted.status }, architect: { status: persisted.status }, critic: { status: persisted.status } };
+  const fallbackAgents = {
+    researcher: { status: persisted.status, toolCalls: 0, findingCount: 0, memoryWriteCount: 0 },
+    architect: { status: persisted.status, toolCalls: 0, findingCount: 0, memoryWriteCount: 0 },
+    critic: { status: persisted.status, toolCalls: 0, findingCount: 0, memoryWriteCount: 0 },
+  };
   return {
     id: persisted.id,
     workspaceId: persisted.workspaceId,
@@ -291,10 +370,27 @@ export async function getMozaikRun(runId: string) {
     ...(payload.error ? { error: String(payload.error) } : {}),
     ...(payload.finalAnswer ? { finalAnswer: String(payload.finalAnswer) } : {}),
     agents: payload.agents ?? fallbackAgents,
-    findings: persisted.findings.map((finding) => ({ agent: finding.agent as AgentKey, text: finding.text, createdAt: finding.createdAt.toISOString(), ...(finding.memoryId ? { memoryId: finding.memoryId } : {}) })),
+    findings: persisted.findings.map((finding) => ({ agent: finding.agent as AgentKey, text: finding.text, createdAt: finding.createdAt.toISOString(), ...(finding.memoryId ? { memoryId: finding.memoryId } : {}), ...(finding.sourceUrl ? { sourceUrl: finding.sourceUrl } : {}) })),
     memoryWrites: [],
     events: persisted.events.map((item) => ({ type: item.type, ...(item.agent ? { agent: item.agent as AgentKey } : {}), detail: item.detail, createdAt: item.createdAt.toISOString() })),
   } satisfies RunRecord;
+}
+
+export async function listMozaikRuns(workspaceId: string) {
+  const persisted = await prisma.mozaikRun.findMany({
+    where: { workspaceId },
+    orderBy: { startedAt: "desc" },
+    take: 12,
+    select: { id: true, goal: true, status: true, startedAt: true, finishedAt: true, finalAnswer: true },
+  });
+  return persisted.map((run) => ({
+    id: run.id,
+    goal: run.goal,
+    status: run.status,
+    startedAt: run.startedAt.toISOString(),
+    ...(run.finishedAt ? { finishedAt: run.finishedAt.toISOString() } : {}),
+    hasSynthesis: Boolean(run.finalAnswer),
+  }));
 }
 
 export function startMozaikRun(workspaceId: string, goal: string) {
@@ -312,9 +408,9 @@ export function startMozaikRun(workspaceId: string, goal: string) {
     status: "queued",
     startedAt: now(),
     agents: {
-      researcher: { status: "queued" },
-      architect: { status: "queued" },
-      critic: { status: "queued" },
+      researcher: { status: "queued", toolCalls: 0, findingCount: 0, memoryWriteCount: 0 },
+      architect: { status: "queued", toolCalls: 0, findingCount: 0, memoryWriteCount: 0 },
+      critic: { status: "queued", toolCalls: 0, findingCount: 0, memoryWriteCount: 0 },
     },
     findings: [],
     memoryWrites: [],
@@ -363,6 +459,7 @@ async function executeMozaikRun(run: RunRecord) {
 
   const requests = agents.map(({ key, agent, tools, instruction }) => {
     run.agents[key].status = "running";
+    agentAction(run, key, "Starting the Mozaik loop");
     event(run, "agent.started", `${agent.name} entered its own Mozaik loop`, key);
     const request: InferenceRequest = {
       model,
@@ -389,12 +486,12 @@ async function executeMozaikRun(run: RunRecord) {
         const finishedLoop = await agentModule.runLoop(loop.id);
         const answer = answerFromLoop(finishedLoop);
         const structured = structuredFromLoop(finishedLoop);
-        run.agents[key] = { status: "completed", answer, ...(structured ? { structured } : {}) };
+        run.agents[key] = { ...run.agents[key], status: "completed", currentAction: "Answer assembled", answer, ...(structured ? { structured } : {}) };
         event(run, "agent.completed", "Agent returned its answer", key);
         return { key, answer, structured };
       } catch (error) {
         const message = error instanceof Error ? error.message : "Agent failed";
-        run.agents[key] = { status: "failed", error: message };
+        run.agents[key] = { ...run.agents[key], status: "failed", currentAction: "Stopped with an error", error: message };
         event(run, "agent.failed", message, key);
         return { key, answer: `Agent failed: ${message}` };
       }
@@ -406,8 +503,9 @@ async function executeMozaikRun(run: RunRecord) {
     ...completed.map(({ key, answer }) => `\n${roles.find((role) => role.key === key)!.name}:\n${answer}`),
     run.findings.length ? `\nShared evidence published during the run: ${run.findings.length} finding(s).` : "\nNo shared finding was published; inspect the agent answers for details.",
   ].join("\n");
-  run.status = "completed";
+  const completedCount = Object.values(run.agents).filter((agent) => agent.status === "completed").length;
+  run.status = completedCount > 0 ? "completed" : "failed";
   run.finishedAt = now();
   await prisma.mozaikRun.update({ where: { id: run.id }, data: { status: run.status, finalAnswer: JSON.parse(JSON.stringify({ goal: run.goal, agents: run.agents, finalAnswer: run.finalAnswer })), finishedAt: run.finishedAt } }).catch(() => undefined);
-  event(run, "run.completed", "All concurrent Mozaik loops finished");
+  event(run, run.status === "completed" ? "run.completed" : "run.failed", `${completedCount} of ${roles.length} agents completed; ${roles.length - completedCount} failed`);
 }

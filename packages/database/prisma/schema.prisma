@@ -242,6 +242,7 @@ model MozaikFinding {
   agent     String
   text      String
   memoryId  String?
+  sourceUrl String?
   createdAt DateTime  @default(now())
   run       MozaikRun @relation(fields: [runId], references: [id], onDelete: Cascade)
 

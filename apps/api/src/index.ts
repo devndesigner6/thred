@@ -4,7 +4,7 @@ import express, { type NextFunction, type Request, type Response } from "express
 import { clerkClient, clerkMiddleware, getAuth } from "@clerk/express";
 import { prisma, upsertLocalUser } from "@repo/db";
 import { mcpRouter } from "./mcp-routes.js";
-import { getMozaikRun, startMozaikRun } from "./mozaik-orchestrator.js";
+import { getMozaikRun, listMozaikRuns, startMozaikRun } from "./mozaik-orchestrator.js";
 
 const app = express();
 const port = Number(process.env.PORT ?? 8080);
@@ -119,6 +119,15 @@ app.post("/api/workspaces/:slug/mozaik/runs", requireAuth, async (req: Authentic
         }
         next(error);
     }
+});
+
+/** Lists recent investigations so the workspace can reopen and replay real runs. */
+app.get("/api/workspaces/:slug/mozaik/runs", requireAuth, async (req: AuthenticatedRequest, res, next) => {
+    try {
+        const workspace = await workspaceForUser(req.user!.id, param(req, "slug"));
+        if (!workspace) return res.status(404).json({ error: "Workspace not found" });
+        res.json({ runs: await listMozaikRuns(workspace.id) });
+    } catch (error) { next(error); }
 });
 
 /** Returns live Mozaik agent states, findings, memory writes, and final synthesis. */

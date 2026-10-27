@@ -1,22 +1,22 @@
 # Thred + Mozaik TODO
 
-## Real concurrent Mozaik orchestration
+## Real evidence-driven Mozaik orchestration
 - [x] A signed-in workspace can submit one goal to the API.
 - [x] The API creates a Mozaik runtime space, joins a human kickoff participant and three agent participants, and sends the kickoff message through the runtime.
 - [x] Three specialized agents are created through `defineAgentModule` and run with separate Mozaik loops concurrently.
-- [x] Each loop uses the configured model and can call real Thred tools for HydraDB recall, durable memory writes, shared-board reads, and finding publication.
+- [x] Each agent can use bounded public URL fetch and DNS lookup tools in addition to Thred memory and shared-board tools, with source metadata and persisted tool events.
+- [x] A single failed agent does not erase completed findings; the run reports partial completion and identifies missing roles.
 - [x] Agent outputs, tool calls, errors, shared-memory writes, and final synthesis are returned by the status endpoint.
 
-## Dashboard experience
-- [x] The dashboard has a visible “Mozaik team run” view with a goal input and start action.
-- [x] While a run is active, the dashboard shows all three agents and their current state.
-- [x] The dashboard shows findings and memory writes from the API rather than hard-coded showcase data.
-- [x] The dashboard shows the final synthesis after the three loops finish and displays actionable configuration errors when model or Hydra credentials are missing.
-- [x] Mozaik runs, events, and findings persist in PostgreSQL so a status request can recover after an API restart.
-- [x] Each specialized agent returns a strict role-specific JSON brief that the dashboard can inspect.
+## Full investigation workspace
+- [x] The dashboard shows live current action, tool-call count, finding count, memory state, and structured role briefs instead of raw JSON only.
+- [x] The dashboard shows a complete activity timeline, source/evidence cards, shared board, durable memory state, synthesis, and actionable warnings in the existing Thred palette and typography.
+- [x] A user can start a fresh run without losing the current run and can reopen prior runs from workspace history.
+- [x] Run history is available through an authenticated API endpoint and backed by the existing PostgreSQL persistence.
 
 ## Validation and delivery
-- [x] API and frontend type checks pass.
+- [x] API and frontend type checks pass before the deeper change.
+- [x] API and frontend type checks pass after the deeper change.
 - [x] The API health endpoint remains available.
-- [x] The new route returns a useful 4xx/5xx explanation when required credentials are absent and does not expose secrets.
+- [ ] Render database migration/deployment succeeds if the schema changes.
 - [ ] The change is committed to `origin/main` after checks pass.

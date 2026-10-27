@@ -1,37 +1,34 @@
 # Thred + Mozaik implementation plan
 
 ## Goal
-Turn Thred from a shared-memory product into a working collaborative-agent runtime for the JigJoy hackathon. A user submits one goal; three specialized Mozaik agents run concurrently, use tools to read/write Thred memory, and return evidence plus a final synthesis.
+Turn Thred into a real collaborative-agent workspace for the JigJoy hackathon. A user submits one goal; three specialized Mozaik agents run concurrently, inspect live evidence, use Thred's shared board and durable memory, expose their work as an inspectable timeline, and return a synthesis that remains useful even when one agent fails.
 
 ## Implementation
-- Add `@mozaik-ai/core` to the API workspace.
-- Add `apps/api/src/mozaik-orchestrator.ts` using the installed Mozaik v4 beta APIs: `defineRuntime` for a shared space, `defineAgentModule` for agents and loops, `createParticipant`/`join`/`sendMessage` for runtime membership and a human kickoff, and parallel `runLoop` calls for genuine concurrency.
-- Provide each agent with Thred tools for reading HydraDB memory, writing durable findings, reading the shared run board, and publishing a finding. Tools are invoked inside Mozaik loops, not simulated in the UI.
-- Keep a bounded in-process map for low-latency live status, persist Mozaik runs, events, and findings in PostgreSQL for restart-safe history, and persist durable findings to HydraDB when `HYDRA_DB_API_KEY` is available. Return a clear run error when the configured model credentials are missing.
-- Request strict role-specific JSON briefs from each agent and expose the structured output beside the human-readable answer.
-- Add a dashboard view that starts a multi-agent run and polls the backend status, showing live agent states, findings, shared-memory writes, and final synthesis.
-- Keep the existing Clerk, Vercel, Render, Prisma, and MCP flows intact.
+- Keep `@mozaik-ai/core` as the runtime layer: `defineRuntime` creates the shared space, `defineAgentModule` creates specialized participants and loops, and parallel `runLoop` calls provide genuine concurrency.
+- Expand the real tool surface beyond memory-only orchestration: public URL fetch with bounded text extraction, DNS lookup, durable memory recall/write, shared-board read, and finding publication. Every tool call emits a persisted runtime event and records source metadata when applicable.
+- Make the run model inspectable: expose each agent's current action, tool-call count, finding count, memory-write count, structured brief, errors, and the full event timeline. Persist runs, events, findings, and source metadata in PostgreSQL where the existing schema supports it; keep the in-process map for low-latency polling and restart recovery.
+- Treat partial failure as a valid collaborative outcome: one failed agent must not erase completed evidence. The run completes with a warning when at least one agent produces a result, and the synthesis explicitly identifies failed roles and missing evidence.
+- Add a workspace run-history endpoint so completed investigations can be reopened and replayed rather than disappearing after one screen.
+- Redesign only the existing Thred Mozaik view: use the current paper/ink/moss palette and typography, but add a workflow rail, live activity timeline, evidence/source cards, agent brief sections, memory state, synthesis, run history, quick-start goals, and a clear new-run action. No fake or decorative progress.
+- Keep Clerk authentication, Vercel routing, Render API/DB, Prisma migrations, and MCP flows intact. No secrets are shipped to the browser.
 
 ## Project structure
-- `apps/api/src/mozaik-orchestrator.ts`: Mozaik runtime, agent tools, concurrent execution, status aggregation.
-- `apps/api/src/index.ts`: authenticated workspace routes for starting and reading runs.
-- `apps/frontend/app/dashboard/page.tsx`: user-facing multi-agent view and polling UI.
-- `apps/frontend/components/dashboard-sidebar.tsx`: navigation entry.
+- `apps/api/src/mozaik-orchestrator.ts`: runtime, public evidence tools, shared-memory tools, event aggregation, partial-failure handling, and persisted status.
+- `apps/api/src/index.ts`: authenticated Mozaik start/status/history routes.
+- `apps/frontend/app/dashboard/page.tsx`: Thred-native investigation workspace, live polling, run history, evidence/source presentation, and synthesis.
+- `packages/database/prisma/schema.prisma`: existing Mozaik persistence entities, extended only where needed.
 
 ## Design
-- **Style options:** quiet laboratory notebook (0.07), dark control-room console (0.05), collaborative paper workspace (0.08).
-- **Chosen movement:** collaborative paper workspace with a live evidence rail.
-- **Core principles:** make concurrency visible; keep evidence beside claims; use restrained Thred paper/ink colors; show real states instead of decorative progress.
-- **Color philosophy:** Thred's warm paper background keeps the product human while ink, moss, and amber accents distinguish runtime, memory, and waiting states.
-- **Layout paradigm:** a left setup rail and a wide evidence canvas, with agent cards arranged as a working team rather than a generic centered dashboard grid.
-- **Signature elements:** ruled paper dividers, small status dots, and memory chips that appear when HydraDB is written.
-- **Interaction:** one clear goal input starts the team; the page polls status and makes each agent's actual result inspectable.
-- **Animation:** only subtle pulse on active agent states and a short fade-in for new findings; no looping decoration.
-- **Typography:** keep the existing Thred typography and monospace code/status labels.
-- **Brand essence:** Thred is the shared memory layer that lets concurrent AI agents build on one another's work; calm, curious, dependable.
-- **Voice:** direct and human. Example lines: “Give the team one goal.” and “They worked in parallel. Thred kept the evidence.”
-- **Wordmark/logo:** reuse the existing Thred mark.
-- **Signature brand color:** existing moss green used for durable memory.
+- **Movement:** collaborative paper workspace with a live evidence rail.
+- **Principles:** make concurrency visible; keep evidence beside claims; show real states; make failure informative; keep Thred calm and human.
+- **Palette:** warm paper background, ink text, moss for durable memory and verified findings, amber for active work, muted red for warnings.
+- **Layout:** a left workflow rail and a wide evidence canvas; agent cards, source cards, and the timeline are working surfaces rather than generic dashboard tiles.
+- **Signature elements:** ruled dividers, small status dots, source chips, memory chips, and an event trail that reads like a lab notebook.
+- **Interaction:** one goal starts the team; the user can inspect every call, reopen prior runs, begin a fresh run, and understand exactly what is known, unknown, and blocked.
+- **Animation:** only subtle pulse on active agents and short insertion fades for events/findings.
+- **Typography:** reuse existing Thred typography and monospace status labels.
+- **Brand essence:** Thred is the shared memory layer that lets concurrent AI agents build on one another's live evidence; calm, curious, dependable.
+- **Voice:** direct and human: “Give the team one goal.” “They worked in parallel. Thred kept the evidence.” “A failed role is visible; it does not erase the useful work.”
 
 ## Serving
-The API remains the Render Express service. The Next.js frontend calls the existing API base URL through the current authenticated request helper. No secrets are shipped to the browser.
+The API remains the Render Express service. The Next.js frontend calls it through the existing authenticated request helper. Public evidence fetching happens server-side with bounded timeouts and no secret exposure.
