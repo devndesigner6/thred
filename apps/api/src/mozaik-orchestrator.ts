@@ -3,9 +3,12 @@ import {
   defineAgentModule,
   defineRuntime,
   type InferenceRequest,
+  type InferenceResult,
+  type InferenceRunner,
   type SharedState,
   type Tool,
 } from "@mozaik-ai/core";
+import OpenAI from "openai";
 import { prisma } from "@repo/db";
 import { recallLongTermMemory, writeLongTermMemory } from "@repo/hydra";
 
@@ -187,6 +190,58 @@ const roles: Array<{ key: AgentKey; name: string; instruction: string }> = [
   },
 ];
 
+function createOpenAIInferenceRunner(): InferenceRunner {
+  const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  return {
+    async run(request: InferenceRequest): Promise<InferenceResult> {
+      const input = request.context.items.map((item: any) => {
+        if (item.type === "developer_message" || item.type === "system_message") {
+          return { role: "system", content: item.text };
+        }
+        if (item.type === "user_message") {
+          return { role: "user", content: item.text };
+        }
+        if (item.type === "model_message") {
+          return { role: "assistant", content: item.text };
+        }
+        if (item.type === "tool_use_request") {
+          return { type: "function_call", call_id: item.requestId, name: item.toolName, arguments: item.toolArguments };
+        }
+        if (item.type === "tool_use_result") {
+          return { type: "function_call_output", call_id: item.requestId, output: item.result?.text ?? JSON.stringify(item.result) };
+        }
+        if (item.type === "reasoning") {
+          return { type: "reasoning", summary: item.summary?.map((summary: any) => ({ type: "summary_text", text: summary.text })) ?? [] };
+        }
+        return { role: "user", content: String(item.text ?? "") };
+      });
+      const response = await client.responses.create({
+        model: request.model,
+        input,
+        max_output_tokens: request.maxOutputTokens,
+        ...(request.reasoningEffort ? { reasoning: { effort: request.reasoningEffort } } : {}),
+        ...(request.tools?.length ? { tools: request.tools.map((tool) => ({ type: "function" as const, name: tool.name, description: tool.description, parameters: tool.parameters, strict: tool.strict })) } : {}),
+        ...(request.structuredOutput ? { text: { format: { type: "json_schema" as const, name: request.structuredOutput.name ?? "agent_brief", strict: request.structuredOutput.strict ?? true, schema: request.structuredOutput.schema } } } : {}),
+      } as any);
+      const items: any[] = [];
+      for (const item of response.output ?? []) {
+        if (item.type === "message") {
+          const text = item.content?.map((content: any) => content.text ?? "").join("").trim();
+          if (text) items.push({ type: "model_message", text });
+        } else if (item.type === "function_call") {
+          items.push({ type: "tool_use_request", requestId: item.call_id, toolName: item.name, toolArguments: item.arguments });
+        } else if (item.type === "reasoning") {
+          items.push({ type: "reasoning", encryptedContent: item.encrypted_content, summary: item.summary ?? [] });
+        }
+      }
+      return { items, tokenUsage: undefined, rowResponse: response };
+    },
+    async *stream() {
+      throw new Error("Streaming is not enabled for the Thred GPT-6 compatibility runner yet.");
+    },
+  };
+}
+
 function answerFromLoop(loop: { completedOperations: readonly any[] }) {
   const messages = loop.completedOperations
     .filter((operation) => operation.type === "inference")
@@ -282,7 +337,7 @@ async function executeMozaikRun(run: RunRecord) {
   const human = await createParticipant("Human kickoff", ["goal-setting"], [], { role: "human", runId: run.id });
   await join(space.getId(), human);
 
-  const agentModule = defineAgentModule({});
+  const agentModule = defineAgentModule({ inferenceRunnerConfig: { runner: createOpenAIInferenceRunner() } });
   const agents = await Promise.all(
     roles.map(async ({ key, name, instruction }) => {
       const tools = buildTools(run, sharedState, key);
