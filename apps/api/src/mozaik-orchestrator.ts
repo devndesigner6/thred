@@ -346,6 +346,46 @@ function structuredFromLoop(loop: { completedOperations: readonly any[] }) {
   }
 }
 
+async function runNativeAgent(client: OpenAI, run: RunRecord, agent: AgentKey, instruction: string, tools: Tool[]) {
+  let input: any[] = [
+    { role: "developer", content: instruction },
+    { role: "user", content: `Shared goal: ${run.goal}\n\nRun concurrently. Use the Thred tools and public evidence tools. Publish a finding before your final answer. Return only the requested JSON object.` },
+  ];
+  let previousResponseId: string | undefined;
+  let lastText = "";
+  for (let turn = 0; turn < 8; turn += 1) {
+    const response = await client.responses.create({
+      model,
+      input,
+      ...(previousResponseId ? { previous_response_id: previousResponseId } : {}),
+      store: true,
+      max_output_tokens: 700,
+      reasoning: { effort: "medium" },
+      tools: tools.map((tool) => ({ type: "function" as const, name: tool.name, description: tool.description, parameters: tool.parameters, strict: tool.strict })),
+      text: { format: { type: "json_schema", name: `${agent}_brief`, strict: true, schema: outputSchemas[agent] } },
+    } as any);
+    previousResponseId = response.id;
+    const outputItems = response.output as any[];
+    const calls = outputItems.filter((item: any) => item.type === "function_call");
+    const message = outputItems.find((item: any) => item.type === "message");
+    const messageText = message?.content?.map((content: any) => content.text ?? "").join("").trim();
+    if (messageText) lastText = messageText;
+    if (!calls.length) return lastText || "The agent completed without a text answer.";
+    input = [];
+    for (const call of calls) {
+      const tool = tools.find((candidate) => candidate.name === call.name);
+      let result: unknown;
+      if (!tool) result = { error: `Unknown tool ${call.name}` };
+      else {
+        try { result = await tool.invoke(JSON.parse(call.arguments ?? "{}")); }
+        catch (error) { result = { error: error instanceof Error ? error.message : "Tool failed" }; }
+      }
+      input.push({ type: "function_call_output", call_id: call.call_id, output: typeof result === "string" ? result : JSON.stringify(result) });
+    }
+  }
+  return lastText || "The agent stopped after the maximum number of tool turns.";
+}
+
 export async function getMozaikRun(runId: string) {
   const live = runs.get(runId);
   if (live) return live;
@@ -457,35 +497,20 @@ async function executeMozaikRun(run: RunRecord) {
   await sendMessage(space.getId(), human.getId(), run.goal);
   event(run, "runtime.kickoff", `Space ${space.getId()} received the human goal`);
 
-  const requests = agents.map(({ key, agent, tools, instruction }) => {
+  const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  const completed = await Promise.all(
+    agents.map(async ({ key, agent, tools, instruction }) => {
     run.agents[key].status = "running";
     agentAction(run, key, "Starting the Mozaik loop");
     event(run, "agent.started", `${agent.name} entered its own Mozaik loop`, key);
-    const request: InferenceRequest = {
-      model,
-      maxOutputTokens: 700,
-      streaming: false,
-      tools,
-      structuredOutput: { name: `${key}_brief`, schema: outputSchemas[key], strict: true },
-      context: {
-        items: [
-          { type: "developer_message", text: instruction },
-          { type: "user_message", text: `Shared goal: ${run.goal}\n\nRun concurrently. Use the Thred tools. Publish a finding before your final answer. Return only the requested JSON object.` },
-        ],
-      },
-    };
-    return { key, agent, request };
-  });
-
-  const loops = await Promise.all(requests.map(({ agent, request }) => agentModule.createLoop({ subject: run.goal, agentId: agent.id, request })));
-  const completed = await Promise.all(
-    loops.map(async (loop, index) => {
-      const requestEntry = requests[index]!;
-      const key = requestEntry.key;
       try {
-        const finishedLoop = await agentModule.runLoop(loop.id);
-        const answer = answerFromLoop(finishedLoop);
-        const structured = structuredFromLoop(finishedLoop);
+        const answer = await runNativeAgent(client, run, key, instruction, tools);
+        const cleaned = answer.replace(/^```json\s*/i, "").replace(/```$/i, "").trim();
+        let structured: Record<string, unknown> | undefined;
+        try {
+          const parsed = JSON.parse(cleaned) as unknown;
+          if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) structured = parsed as Record<string, unknown>;
+        } catch { /* the visible answer remains useful when a provider returns plain text */ }
         run.agents[key] = { ...run.agents[key], status: "completed", currentAction: "Answer assembled", answer, ...(structured ? { structured } : {}) };
         event(run, "agent.completed", "Agent returned its answer", key);
         return { key, answer, structured };
