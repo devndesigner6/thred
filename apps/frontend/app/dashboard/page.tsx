@@ -72,6 +72,7 @@ type ProviderCredential = {
 };
 type View =
   | "overview"
+  | "mozaik"
   | "mcp"
   | "apiKeys"
   | "providers"
@@ -96,6 +97,18 @@ type Overview = {
   metrics: { agentCount: number; checkpointCount: number };
   latestSessions: AgentSession[];
   latestCheckpoints: Checkpoint[];
+};
+
+type MozaikRun = {
+  id: string;
+  goal: string;
+  status: "queued" | "running" | "completed" | "failed";
+  error?: string;
+  finalAnswer?: string;
+  agents: Record<string, { status: string; answer?: string; error?: string }>;
+  findings: Array<{ agent: string; text: string; createdAt: string }>;
+  memoryWrites: Array<{ agent: string; text: string; memoryId?: string; createdAt: string }>;
+  events: Array<{ type: string; agent?: string; detail: string; createdAt: string }>;
 };
 
 const setupSteps: { label: string; target: View }[] = [
@@ -915,6 +928,7 @@ function DashboardContent({
   const isHeroPreview = preview || isHeroFromQuery;
   const initialView: View =
     previewView === "mcp" ||
+    previewView === "mozaik" ||
     previewView === "apiKeys" ||
     previewView === "providers" ||
     previewView === "prompts" ||
@@ -1239,6 +1253,7 @@ function DashboardContent({
                 ) : null}
               </>
             )}
+            {view === "mozaik" && <MozaikTeamRun workspace={workspace} request={request} />}
             {view === "mcp" && (
               <>
                 <PageHeader title="Bring Thred" accent="into your agent.">
@@ -1503,5 +1518,149 @@ export default function DashboardPage({ preview = false }: { preview?: boolean }
     <Suspense fallback={<DashboardSkeleton />}>
       <DashboardFromQuery />
     </Suspense>
+  );
+}
+
+
+function MozaikTeamRun({
+  workspace,
+  request,
+}: {
+  workspace: Workspace;
+  request: (path: string, init?: RequestInit) => Promise<Response>;
+}) {
+  const [goal, setGoal] = useState("");
+  const [run, setRun] = useState<MozaikRun | null>(null);
+  const [starting, setStarting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!run || run.status === "completed" || run.status === "failed") return;
+    const poll = window.setInterval(() => {
+      void request(`/api/workspaces/${workspace.slug}/mozaik/runs/${run.id}`)
+        .then(async (response) => {
+          if (!response.ok) return;
+          const body = (await response.json()) as { run: MozaikRun };
+          setRun(body.run);
+        })
+        .catch(() => undefined);
+    }, 1200);
+    return () => window.clearInterval(poll);
+  }, [request, run, workspace.slug]);
+
+  const start = async () => {
+    const cleanGoal = goal.trim();
+    if (!cleanGoal) {
+      setError("Give the team one goal.");
+      return;
+    }
+    setStarting(true);
+    setError(null);
+    const response = await request(`/api/workspaces/${workspace.slug}/mozaik/runs`, {
+      method: "POST",
+      body: JSON.stringify({ goal: cleanGoal }),
+    });
+    const body = (await response.json().catch(() => null)) as { run?: MozaikRun; error?: string } | null;
+    if (!response.ok || !body?.run) {
+      setError(body?.error ?? "The Mozaik team could not start.");
+      setStarting(false);
+      return;
+    }
+    setRun(body.run);
+    setStarting(false);
+  };
+
+  const statusLabel = run?.status === "completed" ? "Complete" : run?.status === "failed" ? "Needs attention" : run ? "Working" : "Ready";
+
+  return (
+    <>
+      <PageHeader title="Mozaik team run" accent="One goal. Three agents. Shared memory.">
+        This is the working hackathon path: Researcher, Architect, and Critic run at the same time through Mozaik and use Thred to share evidence.
+      </PageHeader>
+      <Section title="Give the team a goal" description="The API starts three real Mozaik loops. Nothing here is pre-recorded.">
+        <textarea
+          value={goal}
+          onChange={(event) => setGoal(event.target.value)}
+          placeholder="Example: Decide whether we should move Thred's production database to Neon."
+          rows={4}
+          className={`${ui.input} resize-y leading-6`}
+          disabled={starting || run?.status === "running"}
+        />
+        <div className="mt-4 flex flex-wrap items-center gap-3">
+          <button type="button" onClick={start} disabled={starting || run?.status === "running"} className={ui.primary}>
+            {starting ? "Starting team…" : run?.status === "running" ? "Agents are working…" : "Start concurrent run"}
+            <PixelArrowRight className="size-3" />
+          </button>
+          {run && <span className="font-mono text-[11px] uppercase tracking-[0.08em] text-[#8a8c86]">{statusLabel}</span>}
+        </div>
+        {error && <p role="alert" className="mt-3 text-[12px] leading-5 text-[#a14a3b]">{error}</p>}
+      </Section>
+      {run && (
+        <>
+          <Section title="The working team" description={`Run ${run.id.slice(0, 8)} · agents share the same Thred board.`}>
+            <div className="grid gap-3 sm:grid-cols-3">
+              {(["researcher", "architect", "critic"] as const).map((agent) => {
+                const item = run.agents[agent];
+                return (
+                  <article key={agent} className="rounded-[10px] border border-[#e8e8e4] bg-white p-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-[13px] font-medium capitalize text-[#252724]">{agent}</p>
+                      <span className={`size-2 rounded-full ${item?.status === "running" ? "bg-[#d4a017] animate-pulse" : item?.status === "completed" ? "bg-[#6e8b69]" : item?.status === "failed" ? "bg-[#a14a3b]" : "bg-[#c7cbc3]"}`} />
+                    </div>
+                    <p className="mt-2 font-mono text-[10px] uppercase tracking-[0.08em] text-[#8a8c86]">{item?.status ?? "queued"}</p>
+                    {item?.error && <p className="mt-3 text-[11px] leading-5 text-[#a14a3b]">{item.error}</p>}
+                  </article>
+                );
+              })}
+            </div>
+          </Section>
+          <Section title="Shared evidence" description="These findings arrive from the agents' real tool calls during the run.">
+            {run.findings.length ? (
+              <div className="divide-y divide-[#e8e8e4]">
+                {run.findings.map((finding, index) => (
+                  <article key={`${finding.createdAt}-${index}`} className="py-4 first:pt-0 last:pb-0">
+                    <p className="font-mono text-[10px] uppercase tracking-[0.08em] text-[#6e8b69]">{finding.agent} · published to Thred</p>
+                    <p className="mt-1 text-[13px] leading-6 text-[#454a43]">{finding.text}</p>
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <p className="text-[13px] leading-6 text-[#747770]">The shared board is empty for now. The agents will publish here as their loops progress.</p>
+            )}
+          </Section>
+          <Section title="Durable memory" description="Successful writes go to the workspace's HydraDB memory, not just this screen.">
+            {run.memoryWrites.length ? (
+              <div className="space-y-3">
+                {run.memoryWrites.map((memory, index) => (
+                  <div key={`${memory.createdAt}-${index}`} className="rounded-[8px] border border-[#dce7d9] bg-[#f4f8f2] px-4 py-3">
+                    <p className="font-mono text-[10px] uppercase tracking-[0.08em] text-[#6e8b69]">{memory.agent} · saved</p>
+                    <p className="mt-1 text-[12px] leading-5 text-[#454a43]">{memory.text}</p>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-[13px] leading-6 text-[#747770]">No durable memory writes have arrived yet. Add <code className={ui.code}>HYDRA_DB_API_KEY</code> on Render for full memory persistence.</p>
+            )}
+          </Section>
+          {run.finalAnswer && (
+            <Section title="Team synthesis" description="The final answer is assembled after all concurrent loops finish.">
+              <div className="rounded-[10px] border border-[#e8e8e4] bg-white p-5">
+                <p className="whitespace-pre-wrap text-[13px] leading-6 text-[#454a43]">{run.finalAnswer}</p>
+              </div>
+            </Section>
+          )}
+          <Section title="Runtime events" description="Mozaik event trail for this run.">
+            <div className="space-y-2">
+              {run.events.slice(-8).reverse().map((item, index) => (
+                <div key={`${item.createdAt}-${index}`} className="flex gap-3 text-[11px] leading-5">
+                  <span className="shrink-0 font-mono text-[#8a8c86]">{item.type}</span>
+                  <span className="text-[#747770]">{item.agent ? `${item.agent}: ` : ""}{item.detail}</span>
+                </div>
+              ))}
+            </div>
+          </Section>
+        </>
+      )}
+    </>
   );
 }

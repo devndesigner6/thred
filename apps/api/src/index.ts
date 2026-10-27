@@ -4,6 +4,7 @@ import express, { type NextFunction, type Request, type Response } from "express
 import { clerkClient, clerkMiddleware, getAuth } from "@clerk/express";
 import { prisma, upsertLocalUser } from "@repo/db";
 import { mcpRouter } from "./mcp-routes.js";
+import { getMozaikRun, startMozaikRun } from "./mozaik-orchestrator.js";
 
 const app = express();
 const port = Number(process.env.PORT ?? 8080);
@@ -103,6 +104,38 @@ async function requireAuth(
 app.get("/health", (_req, res) => res.json({ status: "ok" }));
 
 app.use("/api/mcp", mcpRouter);
+
+/** Starts a real concurrent Mozaik team run for one Thred workspace. */
+app.post("/api/workspaces/:slug/mozaik/runs", requireAuth, async (req: AuthenticatedRequest, res, next) => {
+    try {
+        const workspace = await workspaceForUser(req.user!.id, param(req, "slug"));
+        if (!workspace) return res.status(404).json({ error: "Workspace not found" });
+        const goal = typeof req.body?.goal === "string" ? req.body.goal : "";
+        const run = startMozaikRun(workspace.id, goal);
+        res.status(202).json({ run });
+    } catch (error) {
+        if (error instanceof Error && /Add an AI provider key|Goal is required|Goal must be/.test(error.message)) {
+            return res.status(400).json({ error: error.message });
+        }
+        next(error);
+    }
+});
+
+/** Returns live Mozaik agent states, findings, memory writes, and final synthesis. */
+app.get("/api/workspaces/:slug/mozaik/runs/:runId", requireAuth, async (req: AuthenticatedRequest, res, next) => {
+    try {
+        const workspace = await workspaceForUser(req.user!.id, param(req, "slug"));
+        if (!workspace) return res.status(404).json({ error: "Workspace not found" });
+        const run = getMozaikRun(param(req, "runId"));
+        if (run.workspaceId !== workspace.id) return res.status(404).json({ error: "Mozaik run not found" });
+        res.json({ run });
+    } catch (error) {
+        if (error instanceof Error && error.message === "Mozaik run not found") {
+            return res.status(404).json({ error: error.message });
+        }
+        next(error);
+    }
+});
 
 app.get("/api/me", requireAuth, (req: AuthenticatedRequest, res) => {
     res.json({ user: req.user });

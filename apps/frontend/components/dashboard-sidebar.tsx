@@ -31,6 +31,7 @@ const menu = {
 
 export type DashboardView =
   | "overview"
+  | "mozaik"
   | "mcp"
   | "apiKeys"
   | "providers"
@@ -54,6 +55,7 @@ const OPEN_NAV_SECTIONS: NavSection[] = [
     label: "Workspace",
     items: [
       { id: "overview", label: "Overview", icon: PixelLayout },
+      { id: "mozaik", label: "Mozaik team run", icon: PixelPlug },
     ],
   },
   {
