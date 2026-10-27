@@ -193,9 +193,14 @@ const roles: Array<{ key: AgentKey; name: string; instruction: string }> = [
 function createOpenAIInferenceRunner(): InferenceRunner {
   const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
   const functionCalls = new Map<string, Record<string, unknown>>();
+  const responseIds = new Map<string, string>();
   return {
     async run(request: InferenceRequest): Promise<InferenceResult> {
-      const input = request.context.items.map((item: any) => {
+      const toolResult = [...request.context.items].reverse().find((item: any) => item.type === "tool_use_result") as any;
+      const previousResponseId = toolResult ? responseIds.get(toolResult.requestId) : undefined;
+      const input = previousResponseId
+        ? [{ type: "function_call_output", call_id: toolResult.requestId, output: toolResult.result?.text ?? JSON.stringify(toolResult.result) }]
+        : request.context.items.map((item: any) => {
         if (item.type === "developer_message" || item.type === "system_message") {
           return { role: "system", content: item.text };
         }
@@ -215,11 +220,12 @@ function createOpenAIInferenceRunner(): InferenceRunner {
           if (item.openaiItem) return item.openaiItem;
           return { type: "reasoning", summary: item.summary?.map((summary: any) => ({ type: "summary_text", text: summary.text })) ?? [] };
         }
-        return { role: "user", content: String(item.text ?? "") };
-      });
+          return { role: "user", content: String(item.text ?? "") };
+        });
       const response = await client.responses.create({
         model: request.model,
         input,
+        ...(previousResponseId ? { previous_response_id: previousResponseId } : {}),
         max_output_tokens: request.maxOutputTokens,
         ...(request.reasoningEffort ? { reasoning: { effort: request.reasoningEffort } } : {}),
         ...(request.tools?.length ? { tools: request.tools.map((tool) => ({ type: "function" as const, name: tool.name, description: tool.description, parameters: tool.parameters, strict: tool.strict })) } : {}),
@@ -232,6 +238,7 @@ function createOpenAIInferenceRunner(): InferenceRunner {
           if (text) items.push({ type: "model_message", text });
         } else if (item.type === "function_call") {
           functionCalls.set(item.call_id, item as unknown as Record<string, unknown>);
+          responseIds.set(item.call_id, response.id);
           items.push({ type: "tool_use_request", requestId: item.call_id, toolName: item.name, toolArguments: item.arguments });
         } else if (item.type === "reasoning") {
           items.push({ type: "reasoning", encryptedContent: item.encrypted_content, summary: item.summary ?? [], openaiItem: item });
