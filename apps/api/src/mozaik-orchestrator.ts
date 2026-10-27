@@ -6,6 +6,7 @@ import {
   type SharedState,
   type Tool,
 } from "@mozaik-ai/core";
+import { prisma } from "@repo/db";
 import { recallLongTermMemory, writeLongTermMemory } from "@repo/hydra";
 
 type AgentKey = "researcher" | "architect" | "critic";
@@ -27,7 +28,7 @@ type RunRecord = {
   finishedAt?: string;
   error?: string;
   finalAnswer?: string;
-  agents: Record<AgentKey, { status: AgentStatus; answer?: string; error?: string }>;
+  agents: Record<AgentKey, { status: AgentStatus; answer?: string; structured?: Record<string, unknown>; error?: string }>;
   findings: Finding[];
   memoryWrites: Array<{ agent: AgentKey; text: string; memoryId?: string; createdAt: string }>;
   events: Array<{ type: string; agent?: AgentKey; detail: string; createdAt: string }>;
@@ -36,6 +37,27 @@ type RunRecord = {
 type RunSharedState = SharedState & {
   goal: string;
   board: Finding[];
+};
+
+const outputSchemas: Record<AgentKey, Record<string, unknown>> = {
+  researcher: {
+    type: "object",
+    properties: { facts: { type: "array", items: { type: "string" } }, unknowns: { type: "array", items: { type: "string" } }, sources: { type: "array", items: { type: "string" } } },
+    required: ["facts", "unknowns", "sources"],
+    additionalProperties: false,
+  },
+  architect: {
+    type: "object",
+    properties: { proposal: { type: "string" }, steps: { type: "array", items: { type: "string" } }, tradeoffs: { type: "array", items: { type: "string" } } },
+    required: ["proposal", "steps", "tradeoffs"],
+    additionalProperties: false,
+  },
+  critic: {
+    type: "object",
+    properties: { risks: { type: "array", items: { type: "string" } }, unsupportedClaims: { type: "array", items: { type: "string" } }, recommendation: { type: "string" } },
+    required: ["risks", "unsupportedClaims", "recommendation"],
+    additionalProperties: false,
+  },
 };
 
 const runs = new Map<string, RunRecord>();
@@ -54,6 +76,7 @@ function getRun(runId: string) {
 function event(run: RunRecord, type: string, detail: string, agent?: AgentKey) {
   run.events.push({ type, detail, ...(agent ? { agent } : {}), createdAt: now() });
   if (run.events.length > 100) run.events.shift();
+  void prisma.mozaikEvent.create({ data: { runId: run.id, type, detail, ...(agent ? { agent } : {}) } }).catch(() => undefined);
 }
 
 function toolSchema(properties: Record<string, unknown>, required: string[]) {
@@ -102,6 +125,7 @@ function buildTools(run: RunRecord, state: RunSharedState, agent: AgentKey): Too
       const finding = { agent, text: text.trim().slice(0, 1800), createdAt: now() } satisfies Finding;
       state.board.push(finding);
       run.findings.push(finding);
+      void prisma.mozaikFinding.create({ data: { runId: run.id, agent, text: finding.text } }).catch(() => undefined);
       event(run, "finding.published", finding.text, agent);
       return { published: true, finding };
     },
@@ -172,8 +196,40 @@ function answerFromLoop(loop: { completedOperations: readonly any[] }) {
   return messages.at(-1) ?? "The agent completed without a text answer.";
 }
 
-export function getMozaikRun(runId: string) {
-  return getRun(runId);
+function structuredFromLoop(loop: { completedOperations: readonly any[] }) {
+  const text = answerFromLoop(loop).replace(/^```json\s*/i, "").replace(/```$/i, "").trim();
+  try {
+    const value = JSON.parse(text) as unknown;
+    return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+export async function getMozaikRun(runId: string) {
+  const live = runs.get(runId);
+  if (live) return live;
+  const persisted = await prisma.mozaikRun.findUnique({
+    where: { id: runId },
+    include: { events: { orderBy: { createdAt: "asc" } }, findings: { orderBy: { createdAt: "asc" } } },
+  });
+  if (!persisted) throw new Error("Mozaik run not found");
+  const payload = persisted.finalAnswer && typeof persisted.finalAnswer === "object" ? persisted.finalAnswer as Record<string, any> : {};
+  const fallbackAgents = { researcher: { status: persisted.status }, architect: { status: persisted.status }, critic: { status: persisted.status } };
+  return {
+    id: persisted.id,
+    workspaceId: persisted.workspaceId,
+    goal: persisted.goal,
+    status: persisted.status as RunRecord["status"],
+    startedAt: persisted.startedAt.toISOString(),
+    ...(persisted.finishedAt ? { finishedAt: persisted.finishedAt.toISOString() } : {}),
+    ...(payload.error ? { error: String(payload.error) } : {}),
+    ...(payload.finalAnswer ? { finalAnswer: String(payload.finalAnswer) } : {}),
+    agents: payload.agents ?? fallbackAgents,
+    findings: persisted.findings.map((finding) => ({ agent: finding.agent as AgentKey, text: finding.text, createdAt: finding.createdAt.toISOString(), ...(finding.memoryId ? { memoryId: finding.memoryId } : {}) })),
+    memoryWrites: [],
+    events: persisted.events.map((item) => ({ type: item.type, ...(item.agent ? { agent: item.agent as AgentKey } : {}), detail: item.detail, createdAt: item.createdAt.toISOString() })),
+  } satisfies RunRecord;
 }
 
 export function startMozaikRun(workspaceId: string, goal: string) {
@@ -204,12 +260,18 @@ export function startMozaikRun(workspaceId: string, goal: string) {
     run.status = "failed";
     run.error = error instanceof Error ? error.message : "Mozaik run failed";
     run.finishedAt = now();
+    void prisma.mozaikRun.update({ where: { id: run.id }, data: { status: run.status, finalAnswer: { error: run.error }, finishedAt: run.finishedAt } }).catch(() => undefined);
     event(run, "run.failed", run.error);
   });
   return run;
 }
 
 async function executeMozaikRun(run: RunRecord) {
+  await prisma.mozaikRun.upsert({
+    where: { id: run.id },
+    create: { id: run.id, workspaceId: run.workspaceId, goal: run.goal, status: "running" },
+    update: { status: "running" },
+  }).catch(() => undefined);
   run.status = "running";
   event(run, "run.started", "Three Mozaik agent loops are starting concurrently");
 
@@ -242,10 +304,11 @@ async function executeMozaikRun(run: RunRecord) {
       maxOutputTokens: 700,
       streaming: false,
       tools,
+      structuredOutput: { name: `${key}_brief`, schema: outputSchemas[key], strict: true },
       context: {
         items: [
           { type: "developer_message", text: instruction },
-          { type: "user_message", text: `Shared goal: ${run.goal}\n\nRun concurrently. Use the Thred tools. Publish a finding before your final answer.` },
+          { type: "user_message", text: `Shared goal: ${run.goal}\n\nRun concurrently. Use the Thred tools. Publish a finding before your final answer. Return only the requested JSON object.` },
         ],
       },
     };
@@ -260,9 +323,10 @@ async function executeMozaikRun(run: RunRecord) {
       try {
         const finishedLoop = await agentModule.runLoop(loop.id);
         const answer = answerFromLoop(finishedLoop);
-        run.agents[key] = { status: "completed", answer };
+        const structured = structuredFromLoop(finishedLoop);
+        run.agents[key] = { status: "completed", answer, ...(structured ? { structured } : {}) };
         event(run, "agent.completed", "Agent returned its answer", key);
-        return { key, answer };
+        return { key, answer, structured };
       } catch (error) {
         const message = error instanceof Error ? error.message : "Agent failed";
         run.agents[key] = { status: "failed", error: message };
@@ -279,5 +343,6 @@ async function executeMozaikRun(run: RunRecord) {
   ].join("\n");
   run.status = "completed";
   run.finishedAt = now();
+  await prisma.mozaikRun.update({ where: { id: run.id }, data: { status: run.status, finalAnswer: JSON.parse(JSON.stringify({ goal: run.goal, agents: run.agents, finalAnswer: run.finalAnswer })), finishedAt: run.finishedAt } }).catch(() => undefined);
   event(run, "run.completed", "All concurrent Mozaik loops finished");
 }

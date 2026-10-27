@@ -7,7 +7,8 @@ Turn Thred from a shared-memory product into a working collaborative-agent runti
 - Add `@mozaik-ai/core` to the API workspace.
 - Add `apps/api/src/mozaik-orchestrator.ts` using the installed Mozaik v4 beta APIs: `defineRuntime` for a shared space, `defineAgentModule` for agents and loops, `createParticipant`/`join`/`sendMessage` for runtime membership and a human kickoff, and parallel `runLoop` calls for genuine concurrency.
 - Provide each agent with Thred tools for reading HydraDB memory, writing durable findings, reading the shared run board, and publishing a finding. Tools are invoked inside Mozaik loops, not simulated in the UI.
-- Keep run state in a bounded in-process map for the live demo and expose start/status API routes. Persist durable findings to HydraDB when `HYDRA_DB_API_KEY` is available; return a clear run error when the configured model credentials are missing.
+- Keep a bounded in-process map for low-latency live status, persist Mozaik runs, events, and findings in PostgreSQL for restart-safe history, and persist durable findings to HydraDB when `HYDRA_DB_API_KEY` is available. Return a clear run error when the configured model credentials are missing.
+- Request strict role-specific JSON briefs from each agent and expose the structured output beside the human-readable answer.
 - Add a dashboard view that starts a multi-agent run and polls the backend status, showing live agent states, findings, shared-memory writes, and final synthesis.
 - Keep the existing Clerk, Vercel, Render, Prisma, and MCP flows intact.
 

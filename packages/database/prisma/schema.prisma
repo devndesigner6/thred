@@ -101,6 +101,7 @@ model Workspace {
   checkpoints WorkingCheckpoint[]
   evalRuns    EvalRun[]
   providerCredentials ProviderCredential[]
+  mozaikRuns  MozaikRun[]
 
   @@index([ownerId])
 }
@@ -206,4 +207,43 @@ model EvalCaseResult {
 
   @@unique([evalRunId, caseId])
   @@index([caseId])
+}
+
+model MozaikRun {
+  id          String          @id
+  workspaceId String
+  goal        String
+  status      String
+  finalAnswer Json?
+  startedAt   DateTime        @default(now())
+  finishedAt  DateTime?
+  workspace   Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  events      MozaikEvent[]
+  findings    MozaikFinding[]
+
+  @@index([workspaceId, startedAt])
+}
+
+model MozaikEvent {
+  id        String    @id @default(cuid())
+  runId     String
+  agent     String?
+  type      String
+  detail    String
+  createdAt DateTime  @default(now())
+  run       MozaikRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@index([runId, createdAt])
+}
+
+model MozaikFinding {
+  id        String    @id @default(cuid())
+  runId     String
+  agent     String
+  text      String
+  memoryId  String?
+  createdAt DateTime  @default(now())
+  run       MozaikRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@index([runId, createdAt])
 }

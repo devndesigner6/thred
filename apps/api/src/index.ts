@@ -126,7 +126,7 @@ app.get("/api/workspaces/:slug/mozaik/runs/:runId", requireAuth, async (req: Aut
     try {
         const workspace = await workspaceForUser(req.user!.id, param(req, "slug"));
         if (!workspace) return res.status(404).json({ error: "Workspace not found" });
-        const run = getMozaikRun(param(req, "runId"));
+        const run = await getMozaikRun(param(req, "runId"));
         if (run.workspaceId !== workspace.id) return res.status(404).json({ error: "Mozaik run not found" });
         res.json({ run });
     } catch (error) {

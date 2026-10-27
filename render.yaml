@@ -43,3 +43,5 @@ services:
         value: openai
       - key: OPENAI_API_KEY
         sync: false
+      - key: MOZAIK_MODEL
+        value: gpt-5.4-mini

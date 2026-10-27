@@ -12,6 +12,8 @@
 - [x] While a run is active, the dashboard shows all three agents and their current state.
 - [x] The dashboard shows findings and memory writes from the API rather than hard-coded showcase data.
 - [x] The dashboard shows the final synthesis after the three loops finish and displays actionable configuration errors when model or Hydra credentials are missing.
+- [x] Mozaik runs, events, and findings persist in PostgreSQL so a status request can recover after an API restart.
+- [x] Each specialized agent returns a strict role-specific JSON brief that the dashboard can inspect.
 
 ## Validation and delivery
 - [x] API and frontend type checks pass.

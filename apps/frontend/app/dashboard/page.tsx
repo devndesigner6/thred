@@ -105,7 +105,7 @@ type MozaikRun = {
   status: "queued" | "running" | "completed" | "failed";
   error?: string;
   finalAnswer?: string;
-  agents: Record<string, { status: string; answer?: string; error?: string }>;
+  agents: Record<string, { status: string; answer?: string; structured?: Record<string, unknown>; error?: string }>;
   findings: Array<{ agent: string; text: string; createdAt: string }>;
   memoryWrites: Array<{ agent: string; text: string; memoryId?: string; createdAt: string }>;
   events: Array<{ type: string; agent?: string; detail: string; createdAt: string }>;
@@ -1609,6 +1609,8 @@ function MozaikTeamRun({
                     </div>
                     <p className="mt-2 font-mono text-[10px] uppercase tracking-[0.08em] text-[#8a8c86]">{item?.status ?? "queued"}</p>
                     {item?.error && <p className="mt-3 text-[11px] leading-5 text-[#a14a3b]">{item.error}</p>}
+                    {item?.structured && <pre className="mt-3 max-h-40 overflow-auto whitespace-pre-wrap rounded-[6px] bg-[#f4f5f2] p-3 font-mono text-[10px] leading-4 text-[#5f665c]">{JSON.stringify(item.structured, null, 2)}</pre>}
+                    {item?.answer && !item.structured && <p className="mt-3 text-[11px] leading-5 text-[#5f665c]">{item.answer}</p>}
                   </article>
                 );
               })}
