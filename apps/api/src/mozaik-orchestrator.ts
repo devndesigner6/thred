@@ -212,6 +212,7 @@ function createOpenAIInferenceRunner(): InferenceRunner {
           return { type: "function_call_output", call_id: item.requestId, output: item.result?.text ?? JSON.stringify(item.result) };
         }
         if (item.type === "reasoning") {
+          if (item.openaiItem) return item.openaiItem;
           return { type: "reasoning", summary: item.summary?.map((summary: any) => ({ type: "summary_text", text: summary.text })) ?? [] };
         }
         return { role: "user", content: String(item.text ?? "") };
@@ -233,7 +234,7 @@ function createOpenAIInferenceRunner(): InferenceRunner {
           functionCalls.set(item.call_id, item as unknown as Record<string, unknown>);
           items.push({ type: "tool_use_request", requestId: item.call_id, toolName: item.name, toolArguments: item.arguments });
         } else if (item.type === "reasoning") {
-          items.push({ type: "reasoning", encryptedContent: item.encrypted_content, summary: item.summary ?? [] });
+          items.push({ type: "reasoning", encryptedContent: item.encrypted_content, summary: item.summary ?? [], openaiItem: item });
         }
       }
       return { items, tokenUsage: undefined, rowResponse: response };
