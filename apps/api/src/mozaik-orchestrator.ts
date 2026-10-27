@@ -192,6 +192,7 @@ const roles: Array<{ key: AgentKey; name: string; instruction: string }> = [
 
 function createOpenAIInferenceRunner(): InferenceRunner {
   const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  const functionCalls = new Map<string, Record<string, unknown>>();
   return {
     async run(request: InferenceRequest): Promise<InferenceResult> {
       const input = request.context.items.map((item: any) => {
@@ -205,7 +206,7 @@ function createOpenAIInferenceRunner(): InferenceRunner {
           return { role: "assistant", content: item.text };
         }
         if (item.type === "tool_use_request") {
-          return { type: "function_call", call_id: item.requestId, name: item.toolName, arguments: item.toolArguments };
+          return functionCalls.get(item.requestId) ?? { type: "function_call", id: item.requestId, call_id: item.requestId, name: item.toolName, arguments: item.toolArguments };
         }
         if (item.type === "tool_use_result") {
           return { type: "function_call_output", call_id: item.requestId, output: item.result?.text ?? JSON.stringify(item.result) };
@@ -229,6 +230,7 @@ function createOpenAIInferenceRunner(): InferenceRunner {
           const text = item.content?.map((content: any) => content.text ?? "").join("").trim();
           if (text) items.push({ type: "model_message", text });
         } else if (item.type === "function_call") {
+          functionCalls.set(item.call_id, item as unknown as Record<string, unknown>);
           items.push({ type: "tool_use_request", requestId: item.call_id, toolName: item.name, toolArguments: item.arguments });
         } else if (item.type === "reasoning") {
           items.push({ type: "reasoning", encryptedContent: item.encrypted_content, summary: item.summary ?? [] });
