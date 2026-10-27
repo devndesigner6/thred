@@ -55,7 +55,7 @@ const OPEN_NAV_SECTIONS: NavSection[] = [
     label: "Workspace",
     items: [
       { id: "overview", label: "Overview", icon: PixelLayout },
-      { id: "mozaik", label: "Mozaik team run", icon: PixelPlug },
+      { id: "mozaik", label: "Investigation room", icon: PixelPlug },
     ],
   },
   {
@@ -236,10 +236,10 @@ export function DashboardSidebar({
                   target="_blank"
                   rel="noreferrer"
                   className="dashboard-sidebar-panel-row"
-                  title="HydraDB memory"
+                  title="External memory"
                 >
                   <PixelDatabase className="size-[18px] shrink-0 text-[#1a1d19]" />
-                  <span className="min-w-0 truncate">HydraDB memory</span>
+                  <span className="min-w-0 truncate">External memory</span>
                 </a>
                 <a
                   href="https://github.com/devndesigner6/thred"
