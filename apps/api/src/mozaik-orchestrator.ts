@@ -98,6 +98,22 @@ function now() {
   return new Date().toISOString();
 }
 
+async function verifyCloudSession(sessionId: string, endpoint: string, projectKey: string) {
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      const response = await fetch(`${endpoint.replace(/\/$/, "")}/v1/sessions/${encodeURIComponent(sessionId)}`, {
+        headers: { authorization: `Bearer ${projectKey}` },
+      });
+      if (response.ok) return true;
+      if (response.status !== 404) return false;
+    } catch {
+      return false;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 500 * (attempt + 1)));
+  }
+  return false;
+}
+
 function getRun(runId: string) {
   const run = runs.get(runId);
   if (!run) throw new Error("Mozaik run not found");
@@ -607,19 +623,28 @@ async function executeMozaikRun(run: RunRecord) {
     }),
   );
 
+  let cloudSessionUrl: string | undefined;
+  const cloudEndpoint = process.env.MOZAIK_CLOUD_ENDPOINT ?? "https://api.app.jigjoy.ai";
   const cloud = process.env.MOZAIK_API_KEY
     ? createCloudExporter({
-      endpoint: process.env.MOZAIK_CLOUD_ENDPOINT ?? "https://api.app.jigjoy.ai",
+      endpoint: cloudEndpoint,
       projectKey: process.env.MOZAIK_API_KEY,
       participants: () => [human, ...agents.map(({ participant }) => participant)] as any,
       redaction: (process.env.MOZAIK_REDACTION as "none" | "content" | "all" | undefined) ?? "content",
-      onSessionUrl: (url) => event(run, "mozaik.cloud.session", `Live observability: ${url}`),
+      onSessionUrl: (url) => { cloudSessionUrl = url; },
       onError: (error) => event(run, "mozaik.cloud.error", error.message),
     })
     : undefined;
   if (cloud) {
     await join(space.getId(), cloud.participant as any);
-    event(run, "mozaik.cloud.connected", `Mozaik Cloud session ${cloud.sessionId} is observing this runtime`);
+    await cloud.flush();
+    const sessionVerified = await verifyCloudSession(cloud.sessionId, cloudEndpoint, process.env.MOZAIK_API_KEY!);
+    if (sessionVerified && cloudSessionUrl) {
+      event(run, "mozaik.cloud.session", `Live observability: ${cloudSessionUrl}`);
+      event(run, "mozaik.cloud.connected", `Mozaik Cloud session ${cloud.sessionId} is observing this runtime`);
+    } else {
+      event(run, "mozaik.cloud.error", `Cloud accepted no readable session for ${cloud.sessionId}; the live link was withheld`);
+    }
   } else {
     event(run, "mozaik.cloud.disabled", "Set MOZAIK_API_KEY on the API service to stream this runtime to Mozaik Cloud");
   }
