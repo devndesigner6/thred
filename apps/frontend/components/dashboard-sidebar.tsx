@@ -55,7 +55,7 @@ const OPEN_NAV_SECTIONS: NavSection[] = [
     label: "Workspace",
     items: [
       { id: "overview", label: "Overview", icon: PixelLayout },
-      { id: "mozaik", label: "Investigation room", icon: PixelPlug },
+      { id: "mozaik", label: "Agent studio", icon: PixelPlug },
     ],
   },
   {

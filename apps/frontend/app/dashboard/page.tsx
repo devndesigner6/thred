@@ -1523,6 +1523,27 @@ export default function DashboardPage({ preview = false }: { preview?: boolean }
   );
 }
 
+const agentVisuals: Record<string, { color: string; ink: string; name: string; short: string }> = {
+  product: { color: "#f5b56f", ink: "#8a4d1c", name: "Product Lead", short: "brief" },
+  frontend: { color: "#8baaf1", ink: "#274d9b", name: "Frontend Builder", short: "ui" },
+  backend: { color: "#72c9b2", ink: "#176957", name: "Backend Builder", short: "api" },
+  qa: { color: "#e88c7d", ink: "#8d352c", name: "QA & Release", short: "qa" },
+};
+
+function AgentLogo({ agent, className = "size-12" }: { agent: string; className?: string }) {
+  const visual = agentVisuals[agent] ?? agentVisuals.product;
+  return (
+    <svg aria-hidden="true" viewBox="0 0 56 56" className={className} fill="none">
+      <path d="M12 25c0-10 7-17 17-17 9 0 16 6 16 15 0 10-6 19-17 20-10 1-16-7-16-18Z" fill={visual.color} />
+      <path d="M16 17c5-7 16-10 24-4" stroke="white" strokeOpacity=".5" strokeWidth="3" strokeLinecap="round" />
+      {agent === "product" && <><rect x="21" y="19" width="15" height="18" rx="3" stroke={visual.ink} strokeWidth="2.2" /><path d="M25 17v5m7-5v5M25 27h7m-7 5h5" stroke={visual.ink} strokeWidth="2" strokeLinecap="round" /></>}
+      {agent === "frontend" && <><path d="m21 20 14 8-7 2-3 7-4-17Z" fill="white" stroke={visual.ink} strokeWidth="2" strokeLinejoin="round" /><path d="M31 35h6" stroke={visual.ink} strokeWidth="2" strokeLinecap="round" /></>}
+      {agent === "backend" && <><rect x="20" y="19" width="17" height="7" rx="2" fill="white" stroke={visual.ink} strokeWidth="2" /><rect x="20" y="30" width="17" height="7" rx="2" fill="white" stroke={visual.ink} strokeWidth="2" /><path d="M24 22h.1M24 33h.1M29 26v4" stroke={visual.ink} strokeWidth="2.2" strokeLinecap="round" /></>}
+      {agent === "qa" && <><circle cx="28" cy="28" r="9" fill="white" stroke={visual.ink} strokeWidth="2" /><path d="m23 28 3 3 7-7" stroke={visual.ink} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" /><path d="M35 35l4 4" stroke={visual.ink} strokeWidth="2.2" strokeLinecap="round" /></>}
+    </svg>
+  );
+}
+
 
 function MozaikTeamRun({
   workspace,
@@ -1576,10 +1597,10 @@ function MozaikTeamRun({
 
   return (
     <>
-      <PageHeader title="Thred investigation room" accent="One goal. Three agents. Shared memory.">
-        Researcher, Architect, and Critic work at the same time through Thred, sharing evidence and keeping every conclusion traceable.
+      <PageHeader title="Thred agent studio" accent="Give each agent a job. Let the team ship the answer.">
+        Product, Frontend, Backend, and QA & Release work at the same time through Thred, sharing handoffs and keeping every decision traceable.
       </PageHeader>
-      <Section title="Give the team a goal" description="Thred starts three real agent loops. Nothing here is pre-recorded.">
+          <Section title="Give the team a task" description="Thred starts four real agent jobs. Nothing here is pre-recorded.">
         <textarea
           value={goal}
           onChange={(event) => setGoal(event.target.value)}
@@ -1599,19 +1620,19 @@ function MozaikTeamRun({
       </Section>
       {run && (
         <>
-          <Section title="The working team" description={`Run ${run.id.slice(0, 8)} · agents share the same Thred board.`}>
-            <div className="grid gap-3 sm:grid-cols-3">
+          <Section title="Your agent team" description={`Run ${run.id.slice(0, 8)} · jobs share the same Thred board.`}>
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
               {(["product", "frontend", "backend", "qa"] as const).map((agent) => {
                 const item = run.agents[agent];
                 return (
                   <article key={agent} className="rounded-[10px] border border-[#e8e8e4] bg-white p-4">
                     <div className="flex items-center justify-between gap-3">
-                      <p className="text-[13px] font-medium capitalize text-[#252724]">{agent}</p>
+                      <div className="flex items-center gap-2"><AgentLogo agent={agent} className="size-8" /><p className="text-[13px] font-medium capitalize text-[#252724]">{agentVisuals[agent]?.name ?? agent}</p></div>
                       <span className={`size-2 rounded-full ${item?.status === "running" ? "bg-[#d4a017] animate-pulse" : item?.status === "completed" ? "bg-[#6e8b69]" : item?.status === "failed" ? "bg-[#a14a3b]" : "bg-[#c7cbc3]"}`} />
                     </div>
                     <p className="mt-2 font-mono text-[10px] uppercase tracking-[0.08em] text-[#8a8c86]">{item?.status ?? "queued"}</p>
                     {item?.error && <p className="mt-3 text-[11px] leading-5 text-[#a14a3b]">{item.error}</p>}
-                    {item?.structured && <pre className="mt-3 max-h-40 overflow-auto whitespace-pre-wrap rounded-[6px] bg-[#f4f5f2] p-3 font-mono text-[10px] leading-4 text-[#5f665c]">{JSON.stringify(item.structured, null, 2)}</pre>}
+                    {item?.structured && <div className="mt-3 space-y-2 rounded-[6px] bg-[#f4f5f2] p-3 text-[10px] leading-4 text-[#5f665c]">{Object.entries(item.structured).map(([key, value]) => <div key={key}><p className="font-mono uppercase tracking-[0.08em] text-[#6e8b69]">{key.replace(/([A-Z])/g, " $1")}</p><p className="mt-0.5">{Array.isArray(value) ? value.join(" · ") : String(value)}</p></div>)}</div>}
                     {item?.answer && !item.structured && <p className="mt-3 text-[11px] leading-5 text-[#5f665c]">{item.answer}</p>}
                   </article>
                 );
@@ -1785,21 +1806,21 @@ function DeepMozaikTeamRun({
   return (
     <>
       <PageHeader
-        title="Thred investigation room"
-        accent="One goal. Four specialists. One shared workspace."
-        actions={run ? <button type="button" onClick={newRun} className={ui.secondary}>New investigation <PixelArrowRight className="size-3" /></button> : undefined}
+        title="Thred agent studio"
+        accent="Give each agent a job. Let the team ship the answer."
+        actions={run ? <button type="button" onClick={newRun} className={ui.secondary}>New team task <PixelArrowRight className="size-3" /></button> : undefined}
       >
-        Thred gives Product, Frontend, Backend, and QA & Release distinct jobs. They work in parallel, read the same board, and hand off decisions instead of returning four disconnected chat answers.
+        Four focused agents work on one task at the same time. Thred keeps their briefs, handoffs, evidence, and release risks in one shared workspace.
       </PageHeader>
 
       <div className="grid gap-0 border-b lg:grid-cols-[210px_minmax(0,1fr)]">
         <aside className="self-start border-r border-[#e8e8e4] px-6 py-8 sm:px-10 lg:sticky lg:top-6 lg:px-6">
           <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-[#8a8c86]">The workflow</p>
           <div className="mt-5 space-y-5">
-            {["Frame the goal", "Research in parallel", "Share evidence", "Synthesize with limits"].map((step, index) => (
+            {["Assign the task", "Work in parallel", "Share the handoffs", "Ship with a release gate"].map((step, index) => (
               <div key={step} className="flex gap-3">
                 <span className="grid size-5 shrink-0 place-items-center rounded-full border border-[#d8ddd5] font-mono text-[10px] text-[#6e8b69]">{index + 1}</span>
-                <div><p className="text-[12px] font-medium text-[#353834]">{step}</p><p className="mt-0.5 text-[11px] leading-4 text-[#8a8c86]">{["One question, not a chat thread.", "Each role has its own loop and tools.", "Findings become context for the team.", "Known, unknown, and risk stay visible."][index]}</p></div>
+                <div><p className="text-[12px] font-medium text-[#353834]">{step}</p><p className="mt-0.5 text-[11px] leading-4 text-[#8a8c86]">{["One task, clear ownership.", "Each job has its own loop and tools.", "Handoffs become context for the team.", "Known, unknown, and risk stay visible."][index]}</p></div>
               </div>
             ))}
           </div>
@@ -1834,9 +1855,9 @@ function DeepMozaikTeamRun({
               </Section>
 
               <Section title="The working team" description="Each card reflects a live Mozaik participant and its actual evidence work.">
-                <div className="grid gap-3 xl:grid-cols-4">{(["product", "frontend", "backend", "qa"] as const).map((agent) => {
+                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{(["product", "frontend", "backend", "qa"] as const).map((agent) => {
                   const item = run.agents[agent] ?? { status: "queued" };
-                  return <article key={agent} className="rounded-[10px] border border-[#e4e7e1] bg-white p-4 shadow-[0_1px_0_rgba(26,31,26,0.03)]"><div className="flex items-start justify-between gap-3"><div><p className="text-[14px] font-medium text-[#252724]">{roleCopy[agent].name}</p><p className="mt-1 text-[11px] leading-4 text-[#8a8c86]">{roleCopy[agent].description}</p></div><span className={`mt-1 size-2 rounded-full ${item.status === "running" ? "animate-pulse bg-[#d4a017]" : item.status === "completed" ? "bg-[#6e8b69]" : item.status === "failed" ? "bg-[#a14a3b]" : "bg-[#c7cbc3]"}`} /></div><p className="mt-4 font-mono text-[10px] uppercase tracking-[0.08em] text-[#747770]">{item.status} · {item.currentAction ?? "Waiting to start"}</p><div className="mt-4 grid grid-cols-3 gap-2 border-t border-[#eef0eb] pt-3"><div><p className="font-mono text-[15px] text-[#353834]">{item.toolCalls ?? 0}</p><p className="text-[10px] text-[#8a8c86]">tool calls</p></div><div><p className="font-mono text-[15px] text-[#353834]">{item.findingCount ?? 0}</p><p className="text-[10px] text-[#8a8c86]">findings</p></div><div><p className="font-mono text-[15px] text-[#353834]">{item.memoryWriteCount ?? 0}</p><p className="text-[10px] text-[#8a8c86]">memory writes</p></div></div>{item.error && <p className="mt-3 rounded-[5px] bg-[#fff5f3] p-2 text-[11px] leading-5 text-[#a14a3b]">{item.error}</p>}{item.structured && <div className="mt-4 space-y-3">{Object.entries(item.structured).map(([key, value]) => <div key={key}><p className="font-mono text-[10px] uppercase tracking-[0.08em] text-[#6e8b69]">{key.replace(/([A-Z])/g, " $1")}</p>{Array.isArray(value) ? <ul className="mt-1 space-y-1 text-[11px] leading-5 text-[#5f665c]">{value.map((entry, index) => <li key={`${key}-${index}`} className="flex gap-2"><span className="text-[#9aae94]">•</span><span>{String(entry)}</span></li>)}</ul> : <p className="mt-0.5 text-[11px] leading-5 text-[#5f665c]">{String(value)}</p>}</div>)}</div>}</article>;
+                  return <article key={agent} className="rounded-[10px] border border-[#e4e7e1] bg-white p-4 shadow-[0_1px_0_rgba(26,31,26,0.03)]"><div className="flex items-start justify-between gap-3"><div className="flex min-w-0 items-center gap-3"><AgentLogo agent={agent} className="size-11 shrink-0" /><div><p className="text-[14px] font-medium text-[#252724]">{roleCopy[agent].name}</p><p className="mt-1 text-[11px] leading-4 text-[#8a8c86]">{roleCopy[agent].description}</p></div></div><span className={`mt-1 size-2 shrink-0 rounded-full ${item.status === "running" ? "animate-pulse bg-[#d4a017]" : item.status === "completed" ? "bg-[#6e8b69]" : item.status === "failed" ? "bg-[#a14a3b]" : "bg-[#c7cbc3]"}`} /></div><p className="mt-4 font-mono text-[10px] uppercase tracking-[0.08em] text-[#747770]">{item.status} · {item.currentAction ?? "Waiting to start"}</p><div className="mt-4 grid grid-cols-3 gap-2 border-t border-[#eef0eb] pt-3"><div><p className="font-mono text-[15px] text-[#353834]">{item.toolCalls ?? 0}</p><p className="text-[10px] text-[#8a8c86]">tool calls</p></div><div><p className="font-mono text-[15px] text-[#353834]">{item.findingCount ?? 0}</p><p className="text-[10px] text-[#8a8c86]">handoffs</p></div><div><p className="font-mono text-[15px] text-[#353834]">{item.memoryWriteCount ?? 0}</p><p className="text-[10px] text-[#8a8c86]">memory writes</p></div></div>{item.error && <p className="mt-3 rounded-[5px] bg-[#fff5f3] p-2 text-[11px] leading-5 text-[#a14a3b]">{item.error}</p>}{item.structured && <div className="mt-4 space-y-3">{Object.entries(item.structured).map(([key, value]) => <div key={key}><p className="font-mono text-[10px] uppercase tracking-[0.08em] text-[#6e8b69]">{key.replace(/([A-Z])/g, " $1")}</p>{Array.isArray(value) ? <ul className="mt-1 space-y-1 text-[11px] leading-5 text-[#5f665c]">{value.map((entry, index) => <li key={`${key}-${index}`} className="flex gap-2"><span className="text-[#9aae94]">•</span><span>{String(entry)}</span></li>)}</ul> : <p className="mt-0.5 text-[11px] leading-5 text-[#5f665c]">{String(value)}</p>}</div>)}</div>}</article>;
                 })}</div>
               </Section>
 
