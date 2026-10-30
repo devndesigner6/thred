@@ -26,6 +26,21 @@ type Finding = {
   sourceTitle?: string;
 };
 
+type Handoff = {
+  agent: AgentKey;
+  title: string;
+  summary: string;
+  items: string[];
+  createdAt: string;
+};
+
+type ReleaseGate = {
+  status: "ready" | "blocked" | "conditional";
+  summary: string;
+  blockers: string[];
+  createdAt: string;
+};
+
 type RunRecord = {
   id: string;
   workspaceId: string;
@@ -37,6 +52,8 @@ type RunRecord = {
   finalAnswer?: string;
   agents: Record<AgentKey, { status: AgentStatus; currentAction?: string; toolCalls: number; findingCount: number; memoryWriteCount: number; answer?: string; structured?: Record<string, unknown>; error?: string }>;
   findings: Finding[];
+  handoffs: Handoff[];
+  releaseGate?: ReleaseGate;
   memoryWrites: Array<{ agent: AgentKey; text: string; memoryId?: string; createdAt: string }>;
   events: Array<{ type: string; agent?: AgentKey; detail: string; createdAt: string }>;
 };
@@ -44,6 +61,7 @@ type RunRecord = {
 type RunSharedState = SharedState & {
   goal: string;
   board: Finding[];
+  handoffs: Handoff[];
 };
 
 const outputSchemas: Record<AgentKey, Record<string, unknown>> = {
@@ -144,6 +162,54 @@ function buildTools(run: RunRecord, state: RunSharedState, agent: AgentKey): Too
       agentAction(run, agent, "Reading the shared Thred board");
       event(run, "board.read", `Read ${state.board.length} shared findings`, agent);
       return { findings: state.board };
+    },
+  };
+
+  const readHandoffs: Tool = {
+    type: "function",
+    name: "thred_read_handoffs",
+    description: "Read the structured work handoffs already published by the other agents.",
+    parameters: toolSchema({}, []),
+    strict: true,
+    invoke: async () => {
+      run.agents[agent].toolCalls += 1;
+      agentAction(run, agent, "Reading shared agent handoffs");
+      event(run, "handoff.read", `Read ${state.handoffs.length} shared handoffs`, agent);
+      return { handoffs: state.handoffs };
+    },
+  };
+
+  const publishHandoff: Tool = {
+    type: "function",
+    name: "thred_publish_handoff",
+    description: "Publish your concrete work handoff to Thred so the other agents can implement, integrate, or test it.",
+    parameters: toolSchema({ title: { type: "string" }, summary: { type: "string" }, items: { type: "array", items: { type: "string" } } }, ["title", "summary", "items"]),
+    strict: true,
+    invoke: async ({ title, summary, items }: { title: string; summary: string; items: string[] }) => {
+      run.agents[agent].toolCalls += 1;
+      agentAction(run, agent, "Publishing a concrete handoff to Thred");
+      const handoff: Handoff = { agent, title: title.trim().slice(0, 160), summary: summary.trim().slice(0, 1200), items: items.map((item) => item.trim().slice(0, 500)).filter(Boolean).slice(0, 12), createdAt: now() };
+      state.handoffs.push(handoff);
+      run.handoffs.push(handoff);
+      event(run, "handoff.published", `${handoff.title}: ${handoff.items.length} deliverable item(s)`, agent);
+      return { published: true, handoff };
+    },
+  };
+
+  const setReleaseGate: Tool = {
+    type: "function",
+    name: "thred_set_release_gate",
+    description: "Set the final QA release gate after reviewing the product brief and both builder handoffs. Only QA & Release may set it.",
+    parameters: toolSchema({ status: { type: "string", enum: ["ready", "blocked", "conditional"] }, summary: { type: "string" }, blockers: { type: "array", items: { type: "string" } } }, ["status", "summary", "blockers"]),
+    strict: true,
+    invoke: async ({ status, summary, blockers }: { status: ReleaseGate["status"]; summary: string; blockers: string[] }) => {
+      run.agents[agent].toolCalls += 1;
+      if (agent !== "qa") return { accepted: false, note: "Only QA & Release can set the release gate" };
+      const gate: ReleaseGate = { status, summary: summary.trim().slice(0, 1200), blockers: blockers.map((item) => item.trim().slice(0, 500)).filter(Boolean).slice(0, 12), createdAt: now() };
+      run.releaseGate = gate;
+      agentAction(run, agent, `Release gate: ${status}`);
+      event(run, "release.gate", `${status}: ${gate.summary}`, agent);
+      return { accepted: true, gate };
     },
   };
 
@@ -248,7 +314,7 @@ function buildTools(run: RunRecord, state: RunSharedState, agent: AgentKey): Too
     },
   };
 
-  return [readMemory, readBoard, fetchUrl, dnsLookup, publishFinding, writeMemory];
+  return [readMemory, readBoard, readHandoffs, publishHandoff, setReleaseGate, fetchUrl, dnsLookup, publishFinding, writeMemory];
 }
 
 const roles: Array<{ key: AgentKey; name: string; instruction: string }> = [
@@ -256,25 +322,25 @@ const roles: Array<{ key: AgentKey; name: string; instruction: string }> = [
     key: "product",
     name: "Product Lead",
     instruction:
-      "You are the Product Lead. Turn the user's goal into a clear build brief with requirements, acceptance criteria, and open questions. Read the shared Thred board first, use evidence tools when the goal references an existing product or website, then publish the brief so the builders can implement against one shared definition of done.",
+      "You are the Product Lead. Turn the user's goal into a clear build brief with requirements, acceptance criteria, and open questions. Read the shared Thred board and existing handoffs first, use evidence tools when the goal references an existing product or website, then call thred_publish_handoff with the brief and definition of done so the builders can implement against one shared contract.",
   },
   {
     key: "frontend",
     name: "Frontend Builder",
     instruction:
-      "You are the Frontend Builder. Work in parallel with the Backend Builder. Read the shared Product Lead brief and existing board, then design the screens, states, responsive behavior, and implementation steps needed to deliver the user's task. Publish a concrete frontend handoff with dependencies and flag backend contracts you need.",
+      "You are the Frontend Builder. Work in parallel with the Backend Builder. Read the shared Product Lead brief, handoffs, and board, then design the screens, states, responsive behavior, and implementation steps needed to deliver the user's task. Call thred_publish_handoff with concrete deliverables, file-level implementation steps, and backend contracts you need. Never claim files changed unless a tool actually changed them.",
   },
   {
     key: "backend",
     name: "Backend Builder",
     instruction:
-      "You are the Backend Builder. Work in parallel with the Frontend Builder. Read the shared Product Lead brief and existing board, then define API routes, data contracts, persistence, auth, external integrations, and implementation steps. Publish a concrete backend handoff and flag frontend contracts you need.",
+      "You are the Backend Builder. Work in parallel with the Frontend Builder. Read the shared Product Lead brief, handoffs, and board, then define API routes, data contracts, persistence, auth, external integrations, and implementation steps. Call thred_publish_handoff with concrete endpoint/data deliverables and flag frontend contracts you need. Never claim files changed unless a tool actually changed them.",
   },
   {
     key: "qa",
     name: "QA & Release",
     instruction:
-      "You are QA & Release. Work concurrently with the builders. Read the shared board repeatedly, compare the product brief with the frontend and backend handoffs, identify integration conflicts, write a practical test plan, and publish the release gate. Never hide unknowns or claim code was changed when the team only produced a plan.",
+      "You are QA & Release. Work concurrently with the builders. Read the shared board and handoffs repeatedly, compare the product brief with the frontend and backend handoffs, identify integration conflicts, publish a QA handoff, and call thred_set_release_gate with ready, conditional, or blocked. Never hide unknowns or claim code was changed when the team only produced a plan.",
   },
 ];
 
@@ -377,6 +443,23 @@ function structuredFromLoop(loop: { completedOperations: readonly any[] }) {
   }
 }
 
+function ensureHandoff(run: RunRecord, state: RunSharedState, agent: AgentKey, structured?: Record<string, unknown>) {
+  if (!structured || run.handoffs.some((handoff) => handoff.agent === agent)) return;
+  const entries = Object.entries(structured);
+  const summaryValue = structured.brief ?? structured.approach ?? structured.releaseGate ?? "Structured work output captured from the agent loop.";
+  const items = entries.flatMap(([, value]) => Array.isArray(value) ? value.map(String) : []).filter(Boolean).slice(0, 12);
+  const handoff: Handoff = {
+    agent,
+    title: `${roles.find((role) => role.key === agent)?.name ?? agent} handoff`,
+    summary: String(summaryValue).slice(0, 1200),
+    items,
+    createdAt: now(),
+  };
+  state.handoffs.push(handoff);
+  run.handoffs.push(handoff);
+  event(run, "handoff.recovered", `${handoff.title} recovered from structured loop output`, agent);
+}
+
 async function runNativeMozaikLoop(
   agentModule: ReturnType<typeof defineAgentModule>,
   run: RunRecord,
@@ -399,7 +482,7 @@ async function runNativeMozaikLoop(
           { type: "developer_message", text: instruction },
           {
             type: "user_message",
-            text: `Shared goal: ${run.goal}\n\nYou are one of three concurrent Thred participants. Use the Thred tools and public evidence tools. Publish a finding before your final answer. Return only the requested JSON object.`,
+            text: `Shared goal: ${run.goal}\n\nYou are one of four concurrent Thred participants. Use Thred memory, shared-board, handoff, release-gate, and public evidence tools. Publish a finding and a concrete handoff before your final answer. Return only the requested JSON object.`,
           },
         ],
       },
@@ -436,6 +519,8 @@ export async function getMozaikRun(runId: string) {
     ...(payload.error ? { error: String(payload.error) } : {}),
     ...(payload.finalAnswer ? { finalAnswer: String(payload.finalAnswer) } : {}),
     agents: payload.agents ?? fallbackAgents,
+    handoffs: Array.isArray(payload.handoffs) ? payload.handoffs : [],
+    ...(payload.releaseGate ? { releaseGate: payload.releaseGate } : {}),
     findings: persisted.findings.map((finding) => ({ agent: finding.agent as AgentKey, text: finding.text, createdAt: finding.createdAt.toISOString(), ...(finding.memoryId ? { memoryId: finding.memoryId } : {}), ...(finding.sourceUrl ? { sourceUrl: finding.sourceUrl } : {}) })),
     memoryWrites: [],
     events: persisted.events.map((item) => ({ type: item.type, ...(item.agent ? { agent: item.agent as AgentKey } : {}), detail: item.detail, createdAt: item.createdAt.toISOString() })),
@@ -480,6 +565,7 @@ export function startMozaikRun(workspaceId: string, goal: string) {
       qa: { status: "queued", toolCalls: 0, findingCount: 0, memoryWriteCount: 0 },
     },
     findings: [],
+    handoffs: [],
     memoryWrites: [],
     events: [],
   };
@@ -504,7 +590,7 @@ async function executeMozaikRun(run: RunRecord) {
   event(run, "run.started", "Four specialized build agents are starting concurrently");
 
   const { initializeRuntime, createSpace, createParticipant, join, sendMessage } = defineRuntime<RunSharedState>();
-  const sharedState: RunSharedState = { goal: run.goal, board: run.findings };
+  const sharedState: RunSharedState = { goal: run.goal, board: run.findings, handoffs: run.handoffs };
   initializeRuntime({ state: sharedState });
   const space = await createSpace(`Thred run ${run.id}`);
   const human = await createParticipant("Human kickoff", ["goal-setting"], [], { role: "human", runId: run.id });
@@ -548,6 +634,13 @@ async function executeMozaikRun(run: RunRecord) {
     event(run, "agent.started", `${agent.name} entered a native Mozaik loop`, key);
       try {
         const { answer, structured } = await runNativeMozaikLoop(agentModule, run, key, agent, tools, instruction);
+        ensureHandoff(run, sharedState, key, structured);
+        if (key === "qa" && !run.releaseGate && structured?.releaseGate) {
+          const gateText = String(structured.releaseGate);
+          const blockers = Array.isArray(structured.risks) ? structured.risks.map(String).slice(0, 12) : [];
+          run.releaseGate = { status: /block|fail|not ready/i.test(gateText) ? "blocked" : blockers.length ? "conditional" : "ready", summary: gateText.slice(0, 1200), blockers, createdAt: now() };
+          event(run, "release.gate.recovered", `${run.releaseGate.status}: ${run.releaseGate.summary}`, key);
+        }
         run.agents[key] = { ...run.agents[key], status: "completed", currentAction: "Answer assembled", answer, ...(structured ? { structured } : {}) };
         event(run, "agent.completed", "Agent returned its answer", key);
         return { key, answer, structured };
@@ -563,12 +656,14 @@ async function executeMozaikRun(run: RunRecord) {
   run.finalAnswer = [
     `Thred ran ${completed.length} Mozaik agents concurrently on: “${run.goal}”`,
     ...completed.map(({ key, answer }) => `\n${roles.find((role) => role.key === key)!.name}:\n${answer}`),
+    `\nShared handoffs: ${run.handoffs.length} concrete handoff(s) are available to the team.`,
+    run.releaseGate ? `\nRelease gate: ${run.releaseGate.status.toUpperCase()} — ${run.releaseGate.summary}${run.releaseGate.blockers.length ? `\nBlockers:\n${run.releaseGate.blockers.map((item) => `- ${item}`).join("\n")}` : ""}` : "\nRelease gate: NOT SET — QA did not produce a gate.",
     run.findings.length ? `\nShared evidence published during the run: ${run.findings.length} finding(s).` : "\nNo shared finding was published; inspect the agent answers for details.",
   ].join("\n");
   const completedCount = Object.values(run.agents).filter((agent) => agent.status === "completed").length;
   run.status = completedCount > 0 ? "completed" : "failed";
   run.finishedAt = now();
-  await prisma.mozaikRun.update({ where: { id: run.id }, data: { status: run.status, finalAnswer: JSON.parse(JSON.stringify({ goal: run.goal, agents: run.agents, finalAnswer: run.finalAnswer })), finishedAt: run.finishedAt } }).catch(() => undefined);
+  await prisma.mozaikRun.update({ where: { id: run.id }, data: { status: run.status, finalAnswer: JSON.parse(JSON.stringify({ goal: run.goal, agents: run.agents, handoffs: run.handoffs, releaseGate: run.releaseGate, finalAnswer: run.finalAnswer })), finishedAt: run.finishedAt } }).catch(() => undefined);
   event(run, run.status === "completed" ? "run.completed" : "run.failed", `${completedCount} of ${roles.length} agents completed; ${roles.length - completedCount} failed`);
   if (cloud) await cloud.end().catch((error) => event(run, "mozaik.cloud.error", error instanceof Error ? error.message : "Mozaik Cloud session could not close"));
 }
