@@ -352,6 +352,7 @@ async function runNativeMozaikLoop(
   run: RunRecord,
   agent: AgentKey,
   participantAgent: { id: string },
+  tools: Tool[],
   instruction: string,
 ) {
   const loop = await agentModule.createLoop({
@@ -361,6 +362,7 @@ async function runNativeMozaikLoop(
       model,
       maxOutputTokens: 700,
       reasoningEffort: "medium",
+      tools,
       structuredOutput: { name: `${agent}_brief`, strict: true, schema: outputSchemas[agent] },
       context: {
         items: [
@@ -508,12 +510,12 @@ async function executeMozaikRun(run: RunRecord) {
   event(run, "runtime.kickoff", `Space ${space.getId()} received the human goal`);
 
   const completed = await Promise.all(
-    agents.map(async ({ key, agent, instruction }) => {
+    agents.map(async ({ key, agent, tools, instruction }) => {
     run.agents[key].status = "running";
     agentAction(run, key, "Starting a native Mozaik loop");
     event(run, "agent.started", `${agent.name} entered a native Mozaik loop`, key);
       try {
-        const { answer, structured } = await runNativeMozaikLoop(agentModule, run, key, agent, instruction);
+        const { answer, structured } = await runNativeMozaikLoop(agentModule, run, key, agent, tools, instruction);
         run.agents[key] = { ...run.agents[key], status: "completed", currentAction: "Answer assembled", answer, ...(structured ? { structured } : {}) };
         event(run, "agent.completed", "Agent returned its answer", key);
         return { key, answer, structured };
