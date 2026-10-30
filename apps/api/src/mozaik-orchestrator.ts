@@ -303,6 +303,7 @@ function createOpenAIInferenceRunner(): InferenceRunner {
         input,
         ...(previousResponseId ? { previous_response_id: previousResponseId } : {}),
         max_output_tokens: request.maxOutputTokens,
+        parallel_tool_calls: false,
         ...(request.reasoningEffort ? { reasoning: { effort: request.reasoningEffort } } : {}),
         ...(request.tools?.length ? { tools: request.tools.map((tool) => ({ type: "function" as const, name: tool.name, description: tool.description, parameters: tool.parameters, strict: tool.strict })) } : {}),
         ...(request.structuredOutput ? { text: { format: { type: "json_schema" as const, name: request.structuredOutput.name ?? "agent_brief", strict: request.structuredOutput.strict ?? true, schema: request.structuredOutput.schema } } } : {}),
