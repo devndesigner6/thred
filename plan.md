@@ -1,10 +1,11 @@
 # Thred + Mozaik implementation plan
 
 ## Goal
-Turn Thred into a real collaborative-agent workspace for the JigJoy hackathon. A user submits one goal; three specialized Mozaik agents run concurrently, inspect live evidence, use Thred's shared board and durable memory, expose their work as an inspectable timeline, and return a synthesis that remains useful even when one agent fails.
+Turn Thred into a real collaborative-agent workspace. A user submits one goal; three specialized Mozaik agents run concurrently through native loops, inspect live evidence, use Thred's shared board and durable memory, stream the same runtime to Mozaik Cloud when configured, expose their work as an inspectable timeline, and return a synthesis that remains useful even when one agent fails.
 
 ## Implementation
-- Keep `@mozaik-ai/core` as the runtime layer: `defineRuntime` creates the shared space, `defineAgentModule` creates specialized participants and loops, and parallel `runLoop` calls provide genuine concurrency.
+- Keep `@mozaik-ai/core` as the runtime layer: `defineRuntime` creates the shared space, `defineAgentModule` creates specialized participants, and each participant now runs through native `createLoop`/`runLoop` state transitions rather than a custom OpenAI tool loop.
+- Stream the live runtime to Mozaik Cloud through the official exporter when `MOZAIK_API_KEY` is configured; the existing runtime notebook exposes the real session link and reports Cloud connection errors honestly.
 - Expand the real tool surface beyond memory-only orchestration: public URL fetch with bounded text extraction, DNS lookup, durable memory recall/write, shared-board read, and finding publication. Every tool call emits a persisted runtime event and records source metadata when applicable.
 - Make the run model inspectable: expose each agent's current action, tool-call count, finding count, memory-write count, structured brief, errors, and the full event timeline. Persist runs, events, findings, and source metadata in PostgreSQL where the existing schema supports it; keep the in-process map for low-latency polling and restart recovery.
 - Treat partial failure as a valid collaborative outcome: one failed agent must not erase completed evidence. The run completes with a warning when at least one agent produces a result, and the synthesis explicitly identifies failed roles and missing evidence.

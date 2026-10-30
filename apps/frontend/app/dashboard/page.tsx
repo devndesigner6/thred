@@ -1758,10 +1758,10 @@ function DeepMozaikTeamRun({
   const completedAgents = run ? Object.values(run.agents).filter((agent) => agent.status === "completed").length : 0;
   const failedAgents = run ? Object.values(run.agents).filter((agent) => agent.status === "failed").length : 0;
   const formatTime = (value: string) => new Date(value).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-  const roleCopy: Record<string, string> = {
-    researcher: "Finds primary evidence and separates facts from unknowns.",
-    architect: "Turns evidence into a practical plan with tradeoffs.",
-    critic: "Stress-tests claims and exposes risk or missing proof.",
+  const roleCopy: Record<string, { name: string; description: string }> = {
+    researcher: { name: "Scout", description: "Finds primary evidence and separates facts from assumptions." },
+    architect: { name: "Verifier", description: "Checks claims against sources and marks what is supported or unknown." },
+    critic: { name: "Red Team", description: "Attacks weak claims, missing evidence, and real-world risks." },
   };
   const presets = [
     "Investigate a website or domain and assess what is verifiable",
@@ -1782,10 +1782,10 @@ function DeepMozaikTeamRun({
     <>
       <PageHeader
         title="Thred investigation room"
-        accent="One goal. Three perspectives. A memory that keeps the work."
+        accent="One goal. Three specialists. Shared evidence."
         actions={run ? <button type="button" onClick={newRun} className={ui.secondary}>New investigation <PixelArrowRight className="size-3" /></button> : undefined}
       >
-        Give Thred one goal and it coordinates three focused agents, gathers evidence, shares findings, and keeps an inspectable record of how the answer was built.
+        Thred runs Scout, Verifier, and Red Team in native Mozaik loops while its shared board keeps claims, sources, and decisions connected.
       </PageHeader>
 
       <div className="grid gap-0 border-b lg:grid-cols-[210px_minmax(0,1fr)]">
@@ -1811,7 +1811,7 @@ function DeepMozaikTeamRun({
               <textarea value={goal} onChange={(event) => setGoal(event.target.value)} placeholder="Example: Investigate helixoxide.xyz and tell me what is verifiable, unknown, and risky." rows={5} className={`${ui.input} resize-y leading-6`} disabled={starting} />
               <div className="mt-4 flex flex-wrap items-center gap-3">
                 <button type="button" onClick={() => void start()} disabled={starting} className={ui.primary}>{starting ? "Opening investigation…" : "Start investigation"}<PixelArrowRight className="size-3" /></button>
-                <span className="text-[11px] text-[#8a8c86]">Runs Researcher, Architect, and Critic concurrently.</span>
+                <span className="text-[11px] text-[#8a8c86]">Runs Scout, Verifier, and Red Team concurrently through Mozaik.</span>
               </div>
               <div className="mt-6 flex flex-wrap gap-2">{presets.map((preset) => <button key={preset} type="button" onClick={() => { setGoal(preset); void start(preset); }} disabled={starting} className="rounded-full border border-[#e1e4de] bg-[#fafbf8] px-3 py-1.5 text-left text-[11px] text-[#697066] hover:border-[#b7c4b2]">{preset}</button>)}</div>
               {error && <p role="alert" className="mt-3 text-[12px] leading-5 text-[#a14a3b]">{error}</p>}
@@ -1829,10 +1829,10 @@ function DeepMozaikTeamRun({
                 {run.status === "completed" && failedAgents > 0 && <p className="mt-3 rounded-[6px] border border-[#ead8d4] bg-[#fff9f7] px-3 py-2 text-[12px] leading-5 text-[#9a554b]">This is a partial result. Completed roles and evidence remain useful, but the failed role's perspective is missing.</p>}
               </Section>
 
-              <Section title="The working team" description="Each card reflects a live participant and its actual evidence work.">
+              <Section title="The working team" description="Each card reflects a live Mozaik participant and its actual evidence work.">
                 <div className="grid gap-3 xl:grid-cols-3">{(["researcher", "architect", "critic"] as const).map((agent) => {
                   const item = run.agents[agent] ?? { status: "queued" };
-                  return <article key={agent} className="rounded-[10px] border border-[#e4e7e1] bg-white p-4 shadow-[0_1px_0_rgba(26,31,26,0.03)]"><div className="flex items-start justify-between gap-3"><div><p className="text-[14px] font-medium capitalize text-[#252724]">{agent}</p><p className="mt-1 text-[11px] leading-4 text-[#8a8c86]">{roleCopy[agent]}</p></div><span className={`mt-1 size-2 rounded-full ${item.status === "running" ? "animate-pulse bg-[#d4a017]" : item.status === "completed" ? "bg-[#6e8b69]" : item.status === "failed" ? "bg-[#a14a3b]" : "bg-[#c7cbc3]"}`} /></div><p className="mt-4 font-mono text-[10px] uppercase tracking-[0.08em] text-[#747770]">{item.status} · {item.currentAction ?? "Waiting to start"}</p><div className="mt-4 grid grid-cols-3 gap-2 border-t border-[#eef0eb] pt-3"><div><p className="font-mono text-[15px] text-[#353834]">{item.toolCalls ?? 0}</p><p className="text-[10px] text-[#8a8c86]">tool calls</p></div><div><p className="font-mono text-[15px] text-[#353834]">{item.findingCount ?? 0}</p><p className="text-[10px] text-[#8a8c86]">findings</p></div><div><p className="font-mono text-[15px] text-[#353834]">{item.memoryWriteCount ?? 0}</p><p className="text-[10px] text-[#8a8c86]">memories</p></div></div>{item.error && <p className="mt-3 rounded-[5px] bg-[#fff5f3] p-2 text-[11px] leading-5 text-[#a14a3b]">{item.error}</p>}{item.structured && <div className="mt-4 space-y-2">{Object.entries(item.structured).map(([key, value]) => <div key={key}><p className="font-mono text-[10px] uppercase tracking-[0.08em] text-[#6e8b69]">{key}</p><p className="mt-0.5 text-[11px] leading-5 text-[#5f665c]">{Array.isArray(value) ? value.join(" · ") : String(value)}</p></div>)}</div>}</article>;
+                  return <article key={agent} className="rounded-[10px] border border-[#e4e7e1] bg-white p-4 shadow-[0_1px_0_rgba(26,31,26,0.03)]"><div className="flex items-start justify-between gap-3"><div><p className="text-[14px] font-medium text-[#252724]">{roleCopy[agent].name}</p><p className="mt-1 text-[11px] leading-4 text-[#8a8c86]">{roleCopy[agent].description}</p></div><span className={`mt-1 size-2 rounded-full ${item.status === "running" ? "animate-pulse bg-[#d4a017]" : item.status === "completed" ? "bg-[#6e8b69]" : item.status === "failed" ? "bg-[#a14a3b]" : "bg-[#c7cbc3]"}`} /></div><p className="mt-4 font-mono text-[10px] uppercase tracking-[0.08em] text-[#747770]">{item.status} · {item.currentAction ?? "Waiting to start"}</p><div className="mt-4 grid grid-cols-3 gap-2 border-t border-[#eef0eb] pt-3"><div><p className="font-mono text-[15px] text-[#353834]">{item.toolCalls ?? 0}</p><p className="text-[10px] text-[#8a8c86]">tool calls</p></div><div><p className="font-mono text-[15px] text-[#353834]">{item.findingCount ?? 0}</p><p className="text-[10px] text-[#8a8c86]">findings</p></div><div><p className="font-mono text-[15px] text-[#353834]">{item.memoryWriteCount ?? 0}</p><p className="text-[10px] text-[#8a8c86]">memory writes</p></div></div>{item.error && <p className="mt-3 rounded-[5px] bg-[#fff5f3] p-2 text-[11px] leading-5 text-[#a14a3b]">{item.error}</p>}{item.structured && <div className="mt-4 space-y-2">{Object.entries(item.structured).map(([key, value]) => <div key={key}><p className="font-mono text-[10px] uppercase tracking-[0.08em] text-[#6e8b69]">{key}</p><p className="mt-0.5 text-[11px] leading-5 text-[#5f665c]">{Array.isArray(value) ? value.join(" · ") : String(value)}</p></div>)}</div>}</article>;
                 })}</div>
               </Section>
 
@@ -1841,13 +1841,13 @@ function DeepMozaikTeamRun({
               </Section>
 
               <Section title="Durable memory" description="This panel distinguishes long-term workspace memory from live screen state.">
-                {run.memoryWrites.length ? <div className="space-y-2">{run.memoryWrites.map((memory, index) => <div key={`${memory.createdAt}-${index}`} className="rounded-[8px] border border-[#dce7d9] bg-[#f4f8f2] px-4 py-3"><div className="flex justify-between gap-3"><p className="font-mono text-[10px] uppercase tracking-[0.08em] text-[#6e8b69]">{memory.agent} · durable write</p><span className="font-mono text-[10px] text-[#a2a79f]">{formatTime(memory.createdAt)}</span></div><p className="mt-1 text-[12px] leading-5 text-[#454a43]">{memory.text}</p></div>)}</div> : <p className="text-[13px] leading-6 text-[#747770]">No durable writes are visible for this run. Add <code className={ui.code}>HYDRA_DB_API_KEY</code> on Render to persist agent memory.</p>}
+                {run.memoryWrites.length ? <div className="space-y-2">{run.memoryWrites.map((memory, index) => <div key={`${memory.createdAt}-${index}`} className="rounded-[8px] border border-[#dce7d9] bg-[#f4f8f2] px-4 py-3"><div className="flex justify-between gap-3"><p className="font-mono text-[10px] uppercase tracking-[0.08em] text-[#6e8b69]">{memory.agent} · durable write</p><span className="font-mono text-[10px] text-[#a2a79f]">{formatTime(memory.createdAt)}</span></div><p className="mt-1 text-[12px] leading-5 text-[#454a43]">{memory.text}</p></div>)}</div> : <p className="text-[13px] leading-6 text-[#747770]">No durable writes are visible for this run. Shared findings and the investigation history remain available in Thred.</p>}
               </Section>
 
               {run.finalAnswer && <Section title="Team synthesis" description="The answer is assembled after the concurrent loops, with limits kept visible."><div className="rounded-[10px] border border-[#e4e7e1] bg-white p-5"><p className="whitespace-pre-wrap text-[13px] leading-6 text-[#454a43]">{run.finalAnswer}</p></div></Section>}
 
               <Section title="Runtime notebook" description="Every meaningful Thred action is recorded in order.">
-                <div className="max-h-[420px] space-y-0 overflow-auto pr-2">{run.events.length ? run.events.map((item, index) => <div key={`${item.createdAt}-${index}`} className="flex gap-3 border-l border-[#dfe4dc] py-2 pl-4 text-[11px] leading-5"><span className="mt-0.5 size-1.5 shrink-0 rounded-full bg-[#9aae94]" /><div className="min-w-0"><div className="flex flex-wrap gap-x-2"><span className="font-mono text-[10px] uppercase tracking-[0.06em] text-[#6e8b69]">{item.type}</span><span className="font-mono text-[10px] text-[#a2a79f]">{formatTime(item.createdAt)}</span></div><p className="text-[#747770]">{item.agent ? `${item.agent}: ` : ""}{item.detail}</p></div></div>) : <p className="text-[13px] text-[#8a8c86]">Waiting for runtime events…</p>}</div>
+                <div className="max-h-[420px] space-y-0 overflow-auto pr-2">{run.events.length ? run.events.map((item, index) => { const cloudUrl = item.detail.match(/https:\/\/app\.jigjoy\.ai\/\?s=[^\s]+/)?.[0]; return <div key={`${item.createdAt}-${index}`} className="flex gap-3 border-l border-[#dfe4dc] py-2 pl-4 text-[11px] leading-5"><span className="mt-0.5 size-1.5 shrink-0 rounded-full bg-[#9aae94]" /><div className="min-w-0"><div className="flex flex-wrap gap-x-2"><span className="font-mono text-[10px] uppercase tracking-[0.06em] text-[#6e8b69]">{item.type}</span><span className="font-mono text-[10px] text-[#a2a79f]">{formatTime(item.createdAt)}</span></div><p className="text-[#747770]">{item.agent ? `${item.agent}: ` : ""}{cloudUrl ? <><span>Live observability: </span><a href={cloudUrl} target="_blank" rel="noreferrer" className="text-[#5f8059] underline underline-offset-2">open in Mozaik Cloud</a></> : item.detail}</p></div></div>; }) : <p className="text-[13px] text-[#8a8c86]">Waiting for runtime events…</p>}</div>
               </Section>
             </>
           )}

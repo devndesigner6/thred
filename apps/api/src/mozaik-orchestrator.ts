@@ -9,6 +9,7 @@ import {
   type SharedState,
   type Tool,
 } from "@mozaik-ai/core";
+import { createCloudExporter } from "@mozaik-ai/cloud-sdk/exporter";
 import OpenAI from "openai";
 import { prisma } from "@repo/db";
 import { recallLongTermMemory, writeLongTermMemory } from "@repo/hydra";
@@ -247,21 +248,21 @@ function buildTools(run: RunRecord, state: RunSharedState, agent: AgentKey): Too
 const roles: Array<{ key: AgentKey; name: string; instruction: string }> = [
   {
     key: "researcher",
-    name: "Researcher",
+    name: "Scout",
     instruction:
-      "You are the Researcher. Investigate the user's goal using Thred recall first, then use public URL fetch and DNS tools when the goal names a website or domain. Separate verified facts from assumptions, cite the source URL in findings, publish your strongest evidence, and write one durable fact when useful.",
+      "You are the Scout. Find primary evidence for the user's goal. Read the Thred board first, then use public URL fetch and DNS tools when relevant. Separate verified facts from assumptions, cite sources, publish one concrete claim to the shared board, and write one durable fact when useful. Your job is discovery, not a final opinion.",
   },
   {
     key: "architect",
-    name: "Architect",
+    name: "Verifier",
     instruction:
-      "You are the Architect. Work concurrently with the other agents. Read Thred memory and the shared board, use public evidence tools when they can validate the goal, turn evidence into a practical plan, call out dependencies and tradeoffs, publish the plan, and write a durable decision.",
+      "You are the Verifier. Work concurrently with the other agents. Read the Thred shared board and independently check the strongest claims with primary evidence. Mark what is supported, weak, or unknown. Publish a verification finding with sources and write a durable decision only when evidence supports it.",
   },
   {
     key: "critic",
-    name: "Critic",
+    name: "Red Team",
     instruction:
-      "You are the Critic. Work concurrently, inspect Thred memory and the shared board, independently check important public claims when possible, challenge weak claims, identify risks, and publish a concise recommendation. Write a durable lesson if you find one.",
+      "You are the Red Team. Work concurrently. Read every finding currently on the Thred shared board, look for unsupported claims, missing evidence, security risks, and failure modes, and independently check important claims when possible. Publish the strongest risk or correction and write a durable lesson if you find one.",
   },
 ];
 
@@ -346,44 +347,36 @@ function structuredFromLoop(loop: { completedOperations: readonly any[] }) {
   }
 }
 
-async function runNativeAgent(client: OpenAI, run: RunRecord, agent: AgentKey, instruction: string, tools: Tool[]) {
-  let input: any[] = [
-    { role: "developer", content: instruction },
-    { role: "user", content: `Shared goal: ${run.goal}\n\nRun concurrently. Use the Thred tools and public evidence tools. Publish a finding before your final answer. Return only the requested JSON object.` },
-  ];
-  let previousResponseId: string | undefined;
-  let lastText = "";
-  for (let turn = 0; turn < 8; turn += 1) {
-    const response = await client.responses.create({
+async function runNativeMozaikLoop(
+  agentModule: ReturnType<typeof defineAgentModule>,
+  run: RunRecord,
+  agent: AgentKey,
+  participantAgent: { id: string },
+  instruction: string,
+) {
+  const loop = await agentModule.createLoop({
+    agentId: participantAgent.id,
+    subject: `Thred investigation: ${run.goal}`,
+    request: {
       model,
-      input,
-      ...(previousResponseId ? { previous_response_id: previousResponseId } : {}),
-      store: true,
-      max_output_tokens: 700,
-      reasoning: { effort: "medium" },
-      tools: tools.map((tool) => ({ type: "function" as const, name: tool.name, description: tool.description, parameters: tool.parameters, strict: tool.strict })),
-      text: { format: { type: "json_schema", name: `${agent}_brief`, strict: true, schema: outputSchemas[agent] } },
-    } as any);
-    previousResponseId = response.id;
-    const outputItems = response.output as any[];
-    const calls = outputItems.filter((item: any) => item.type === "function_call");
-    const message = outputItems.find((item: any) => item.type === "message");
-    const messageText = message?.content?.map((content: any) => content.text ?? "").join("").trim();
-    if (messageText) lastText = messageText;
-    if (!calls.length) return lastText || "The agent completed without a text answer.";
-    input = [];
-    for (const call of calls) {
-      const tool = tools.find((candidate) => candidate.name === call.name);
-      let result: unknown;
-      if (!tool) result = { error: `Unknown tool ${call.name}` };
-      else {
-        try { result = await tool.invoke(JSON.parse(call.arguments ?? "{}")); }
-        catch (error) { result = { error: error instanceof Error ? error.message : "Tool failed" }; }
-      }
-      input.push({ type: "function_call_output", call_id: call.call_id, output: typeof result === "string" ? result : JSON.stringify(result) });
-    }
-  }
-  return lastText || "The agent stopped after the maximum number of tool turns.";
+      maxOutputTokens: 700,
+      reasoningEffort: "medium",
+      structuredOutput: { name: `${agent}_brief`, strict: true, schema: outputSchemas[agent] },
+      context: {
+        items: [
+          { type: "developer_message", text: instruction },
+          {
+            type: "user_message",
+            text: `Shared goal: ${run.goal}\n\nYou are one of three concurrent Thred participants. Use the Thred tools and public evidence tools. Publish a finding before your final answer. Return only the requested JSON object.`,
+          },
+        ],
+      },
+    },
+  });
+  event(run, "agent.loop.created", `Native Mozaik loop ${loop.id} created`, agent);
+  const completed = await agentModule.runLoop(loop.id);
+  event(run, "agent.loop.completed", `Native Mozaik loop ${completed.id} reached ${completed.stateId}`, agent);
+  return { answer: answerFromLoop(completed), structured: structuredFromLoop(completed) };
 }
 
 export async function getMozaikRun(runId: string) {
@@ -490,27 +483,37 @@ async function executeMozaikRun(run: RunRecord) {
       const agent = await agentModule.createAgent({ name, instruction, tools });
       const participant = await createParticipant(name, ["inference", "thred-memory", "concurrent-collaboration"], [], agent);
       await join(space.getId(), participant);
-      return { key, agent, tools, instruction };
+      return { key, agent, participant, tools, instruction };
     }),
   );
+
+  const cloud = process.env.MOZAIK_API_KEY
+    ? createCloudExporter({
+      endpoint: process.env.MOZAIK_CLOUD_ENDPOINT ?? "https://api.app.jigjoy.ai",
+      projectKey: process.env.MOZAIK_API_KEY,
+      participants: () => [human, ...agents.map(({ participant }) => participant)] as any,
+      redaction: (process.env.MOZAIK_REDACTION as "none" | "content" | "all" | undefined) ?? "content",
+      onSessionUrl: (url) => event(run, "mozaik.cloud.session", `Live observability: ${url}`),
+      onError: (error) => event(run, "mozaik.cloud.error", error.message),
+    })
+    : undefined;
+  if (cloud) {
+    await join(space.getId(), cloud.participant as any);
+    event(run, "mozaik.cloud.connected", `Mozaik Cloud session ${cloud.sessionId} is observing this runtime`);
+  } else {
+    event(run, "mozaik.cloud.disabled", "Set MOZAIK_API_KEY on the API service to stream this runtime to Mozaik Cloud");
+  }
 
   await sendMessage(space.getId(), human.getId(), run.goal);
   event(run, "runtime.kickoff", `Space ${space.getId()} received the human goal`);
 
-  const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
   const completed = await Promise.all(
-    agents.map(async ({ key, agent, tools, instruction }) => {
+    agents.map(async ({ key, agent, instruction }) => {
     run.agents[key].status = "running";
-    agentAction(run, key, "Starting the Mozaik loop");
-    event(run, "agent.started", `${agent.name} entered its own Mozaik loop`, key);
+    agentAction(run, key, "Starting a native Mozaik loop");
+    event(run, "agent.started", `${agent.name} entered a native Mozaik loop`, key);
       try {
-        const answer = await runNativeAgent(client, run, key, instruction, tools);
-        const cleaned = answer.replace(/^```json\s*/i, "").replace(/```$/i, "").trim();
-        let structured: Record<string, unknown> | undefined;
-        try {
-          const parsed = JSON.parse(cleaned) as unknown;
-          if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) structured = parsed as Record<string, unknown>;
-        } catch { /* the visible answer remains useful when a provider returns plain text */ }
+        const { answer, structured } = await runNativeMozaikLoop(agentModule, run, key, agent, instruction);
         run.agents[key] = { ...run.agents[key], status: "completed", currentAction: "Answer assembled", answer, ...(structured ? { structured } : {}) };
         event(run, "agent.completed", "Agent returned its answer", key);
         return { key, answer, structured };
@@ -533,4 +536,5 @@ async function executeMozaikRun(run: RunRecord) {
   run.finishedAt = now();
   await prisma.mozaikRun.update({ where: { id: run.id }, data: { status: run.status, finalAnswer: JSON.parse(JSON.stringify({ goal: run.goal, agents: run.agents, finalAnswer: run.finalAnswer })), finishedAt: run.finishedAt } }).catch(() => undefined);
   event(run, run.status === "completed" ? "run.completed" : "run.failed", `${completedCount} of ${roles.length} agents completed; ${roles.length - completedCount} failed`);
+  if (cloud) await cloud.end().catch((error) => event(run, "mozaik.cloud.error", error instanceof Error ? error.message : "Mozaik Cloud session could not close"));
 }
