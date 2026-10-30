@@ -385,7 +385,7 @@ function DashboardSkeleton() {
         ))}
       </aside>
       <div className="min-w-0 flex-1">
-        <div className="page-frame mx-auto min-h-screen max-w-[880px] sm:border-x">
+        <div className="page-frame mx-auto min-h-screen w-full max-w-[1180px] sm:border-x">
           <div className="rule-fade frame-marks frame-marks-sm border-b px-6 pb-10 pt-14 sm:px-10 sm:pt-16">
             <span className="skeleton block h-8 w-[min(340px,80%)]" />
             <span className="skeleton mt-3 block h-8 w-[min(260px,60%)]" />
@@ -1174,7 +1174,7 @@ function DashboardContent({
         )}
         <div className={`bg-[#fcfcfb] ${isHeroPreview ? "min-h-[1100px]" : "min-h-screen"}`}>
           <div
-            className={`page-frame mx-auto sm:border-x max-w-[880px] ${isHeroPreview ? "min-h-[1100px]" : "min-h-screen"}`}
+            className={`page-frame mx-auto w-full max-w-[1180px] sm:border-x ${isHeroPreview ? "min-h-[1100px]" : "min-h-screen"}`}
           >
             {view === "overview" && (
               <>
