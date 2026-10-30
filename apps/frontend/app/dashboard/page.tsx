@@ -1802,6 +1802,7 @@ function DeepMozaikTeamRun({
       return true;
     }) ?? [];
   }, [run?.findings]);
+  const cloudSessionUrl = run?.events.find((item) => item.type === "mozaik.cloud.session")?.detail.match(/https:\/\/app\.jigjoy\.ai\/\?s=[^\s]+/)?.[0];
 
   return (
     <>
@@ -1851,6 +1852,7 @@ function DeepMozaikTeamRun({
                   <span className="text-[12px] text-[#747770]">{completedAgents} complete</span><span className="text-[#c7cbc3]">·</span><span className="text-[12px] text-[#747770]">{activeAgents} active</span>{failedAgents > 0 && <><span className="text-[#c7cbc3]">·</span><span className="text-[12px] text-[#a14a3b]">{failedAgents} needs attention</span></>}
                 </div>
                 <p className="mt-4 max-w-[720px] text-[16px] leading-7 tracking-[-0.02em] text-[#353834]">{run.goal}</p>
+                {cloudSessionUrl && <div className="mt-4 flex flex-wrap items-center gap-3 rounded-[8px] border border-[#d7e2d3] bg-[#f4f8f2] px-3 py-2.5"><span className="size-2 animate-pulse rounded-full bg-[#6e8b69]" /><span className="text-[12px] text-[#5f665c]">The four Thred agents are visible in Mozaik Cloud.</span><a href={cloudSessionUrl} target="_blank" rel="noreferrer" className="font-medium text-[#4f754b] underline underline-offset-2">Watch them live <PixelArrowRight className="ml-1 inline size-3" /></a></div>}
                 {run.status === "completed" && failedAgents > 0 && <p className="mt-3 rounded-[6px] border border-[#ead8d4] bg-[#fff9f7] px-3 py-2 text-[12px] leading-5 text-[#9a554b]">This is a partial result. Completed roles and evidence remain useful, but the failed role's perspective is missing.</p>}
               </Section>
 
