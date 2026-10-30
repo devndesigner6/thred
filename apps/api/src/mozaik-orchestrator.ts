@@ -14,7 +14,7 @@ import OpenAI from "openai";
 import { prisma } from "@repo/db";
 import { recallLongTermMemory, writeLongTermMemory } from "@repo/hydra";
 
-type AgentKey = "researcher" | "architect" | "critic";
+type AgentKey = "product" | "frontend" | "backend" | "qa";
 type AgentStatus = "queued" | "running" | "completed" | "failed";
 
 type Finding = {
@@ -47,22 +47,28 @@ type RunSharedState = SharedState & {
 };
 
 const outputSchemas: Record<AgentKey, Record<string, unknown>> = {
-  researcher: {
+  product: {
     type: "object",
-    properties: { facts: { type: "array", items: { type: "string" } }, unknowns: { type: "array", items: { type: "string" } }, sources: { type: "array", items: { type: "string" } } },
-    required: ["facts", "unknowns", "sources"],
+    properties: { brief: { type: "string" }, requirements: { type: "array", items: { type: "string" } }, acceptanceCriteria: { type: "array", items: { type: "string" } }, sources: { type: "array", items: { type: "string" } } },
+    required: ["brief", "requirements", "acceptanceCriteria", "sources"],
     additionalProperties: false,
   },
-  architect: {
+  frontend: {
     type: "object",
-    properties: { proposal: { type: "string" }, steps: { type: "array", items: { type: "string" } }, tradeoffs: { type: "array", items: { type: "string" } } },
-    required: ["proposal", "steps", "tradeoffs"],
+    properties: { approach: { type: "string" }, screens: { type: "array", items: { type: "string" } }, implementation: { type: "array", items: { type: "string" } }, dependencies: { type: "array", items: { type: "string" } } },
+    required: ["approach", "screens", "implementation", "dependencies"],
     additionalProperties: false,
   },
-  critic: {
+  backend: {
     type: "object",
-    properties: { risks: { type: "array", items: { type: "string" } }, unsupportedClaims: { type: "array", items: { type: "string" } }, recommendation: { type: "string" } },
-    required: ["risks", "unsupportedClaims", "recommendation"],
+    properties: { approach: { type: "string" }, endpoints: { type: "array", items: { type: "string" } }, dataModel: { type: "array", items: { type: "string" } }, integrations: { type: "array", items: { type: "string" } } },
+    required: ["approach", "endpoints", "dataModel", "integrations"],
+    additionalProperties: false,
+  },
+  qa: {
+    type: "object",
+    properties: { testPlan: { type: "array", items: { type: "string" } }, risks: { type: "array", items: { type: "string" } }, releaseGate: { type: "string" }, dependencies: { type: "array", items: { type: "string" } } },
+    required: ["testPlan", "risks", "releaseGate", "dependencies"],
     additionalProperties: false,
   },
 };
@@ -247,22 +253,28 @@ function buildTools(run: RunRecord, state: RunSharedState, agent: AgentKey): Too
 
 const roles: Array<{ key: AgentKey; name: string; instruction: string }> = [
   {
-    key: "researcher",
-    name: "Scout",
+    key: "product",
+    name: "Product Lead",
     instruction:
-      "You are the Scout. Find primary evidence for the user's goal. Read the Thred board first, then use public URL fetch and DNS tools when relevant. Separate verified facts from assumptions, cite sources, publish one concrete claim to the shared board, and write one durable fact when useful. Your job is discovery, not a final opinion.",
+      "You are the Product Lead. Turn the user's goal into a clear build brief with requirements, acceptance criteria, and open questions. Read the shared Thred board first, use evidence tools when the goal references an existing product or website, then publish the brief so the builders can implement against one shared definition of done.",
   },
   {
-    key: "architect",
-    name: "Verifier",
+    key: "frontend",
+    name: "Frontend Builder",
     instruction:
-      "You are the Verifier. Work concurrently with the other agents. Read the Thred shared board and independently check the strongest claims with primary evidence. Mark what is supported, weak, or unknown. Publish a verification finding with sources and write a durable decision only when evidence supports it.",
+      "You are the Frontend Builder. Work in parallel with the Backend Builder. Read the shared Product Lead brief and existing board, then design the screens, states, responsive behavior, and implementation steps needed to deliver the user's task. Publish a concrete frontend handoff with dependencies and flag backend contracts you need.",
   },
   {
-    key: "critic",
-    name: "Red Team",
+    key: "backend",
+    name: "Backend Builder",
     instruction:
-      "You are the Red Team. Work concurrently. Read every finding currently on the Thred shared board, look for unsupported claims, missing evidence, security risks, and failure modes, and independently check important claims when possible. Publish the strongest risk or correction and write a durable lesson if you find one.",
+      "You are the Backend Builder. Work in parallel with the Frontend Builder. Read the shared Product Lead brief and existing board, then define API routes, data contracts, persistence, auth, external integrations, and implementation steps. Publish a concrete backend handoff and flag frontend contracts you need.",
+  },
+  {
+    key: "qa",
+    name: "QA & Release",
+    instruction:
+      "You are QA & Release. Work concurrently with the builders. Read the shared board repeatedly, compare the product brief with the frontend and backend handoffs, identify integration conflicts, write a practical test plan, and publish the release gate. Never hide unknowns or claim code was changed when the team only produced a plan.",
   },
 ];
 
@@ -329,7 +341,7 @@ function createOpenAIInferenceRunner(): InferenceRunner {
   };
 }
 
-function answerFromLoop(loop: { completedOperations: readonly any[] }) {
+function rawAnswerFromLoop(loop: { completedOperations: readonly any[] }) {
   const messages = loop.completedOperations
     .filter((operation) => operation.type === "inference")
     .flatMap((operation) => operation.result?.items ?? [])
@@ -338,8 +350,24 @@ function answerFromLoop(loop: { completedOperations: readonly any[] }) {
   return messages.at(-1) ?? "The agent completed without a text answer.";
 }
 
+function answerFromLoop(loop: { completedOperations: readonly any[] }) {
+  const answer = rawAnswerFromLoop(loop);
+  try {
+    const parsed = JSON.parse(answer) as Record<string, unknown>;
+    return Object.entries(parsed)
+      .map(([key, value]) => {
+        const label = key.replace(/([A-Z])/g, " $1").replace(/^./, (letter) => letter.toUpperCase());
+        if (Array.isArray(value)) return `${label}:\n${value.map((item) => `- ${String(item)}`).join("\n")}`;
+        return `${label}: ${String(value)}`;
+      })
+      .join("\n\n");
+  } catch {
+    return answer;
+  }
+}
+
 function structuredFromLoop(loop: { completedOperations: readonly any[] }) {
-  const text = answerFromLoop(loop).replace(/^```json\s*/i, "").replace(/```$/i, "").trim();
+  const text = rawAnswerFromLoop(loop).replace(/^```json\s*/i, "").replace(/```$/i, "").trim();
   try {
     const value = JSON.parse(text) as unknown;
     return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : undefined;
@@ -392,9 +420,10 @@ export async function getMozaikRun(runId: string) {
   if (!persisted) throw new Error("Mozaik run not found");
   const payload = persisted.finalAnswer && typeof persisted.finalAnswer === "object" ? persisted.finalAnswer as Record<string, any> : {};
   const fallbackAgents = {
-    researcher: { status: persisted.status, toolCalls: 0, findingCount: 0, memoryWriteCount: 0 },
-    architect: { status: persisted.status, toolCalls: 0, findingCount: 0, memoryWriteCount: 0 },
-    critic: { status: persisted.status, toolCalls: 0, findingCount: 0, memoryWriteCount: 0 },
+    product: { status: persisted.status, toolCalls: 0, findingCount: 0, memoryWriteCount: 0 },
+    frontend: { status: persisted.status, toolCalls: 0, findingCount: 0, memoryWriteCount: 0 },
+    backend: { status: persisted.status, toolCalls: 0, findingCount: 0, memoryWriteCount: 0 },
+    qa: { status: persisted.status, toolCalls: 0, findingCount: 0, memoryWriteCount: 0 },
   };
   return {
     id: persisted.id,
@@ -444,9 +473,10 @@ export function startMozaikRun(workspaceId: string, goal: string) {
     status: "queued",
     startedAt: now(),
     agents: {
-      researcher: { status: "queued", toolCalls: 0, findingCount: 0, memoryWriteCount: 0 },
-      architect: { status: "queued", toolCalls: 0, findingCount: 0, memoryWriteCount: 0 },
-      critic: { status: "queued", toolCalls: 0, findingCount: 0, memoryWriteCount: 0 },
+      product: { status: "queued", toolCalls: 0, findingCount: 0, memoryWriteCount: 0 },
+      frontend: { status: "queued", toolCalls: 0, findingCount: 0, memoryWriteCount: 0 },
+      backend: { status: "queued", toolCalls: 0, findingCount: 0, memoryWriteCount: 0 },
+      qa: { status: "queued", toolCalls: 0, findingCount: 0, memoryWriteCount: 0 },
     },
     findings: [],
     memoryWrites: [],
@@ -470,7 +500,7 @@ async function executeMozaikRun(run: RunRecord) {
     update: { status: "running" },
   }).catch(() => undefined);
   run.status = "running";
-  event(run, "run.started", "Three Mozaik agent loops are starting concurrently");
+  event(run, "run.started", "Four specialized build agents are starting concurrently");
 
   const { initializeRuntime, createSpace, createParticipant, join, sendMessage } = defineRuntime<RunSharedState>();
   const sharedState: RunSharedState = { goal: run.goal, board: run.findings };

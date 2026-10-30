@@ -1,7 +1,7 @@
 # Thred + Mozaik implementation plan
 
 ## Goal
-Turn Thred into a real collaborative-agent workspace. A user submits one goal; three specialized Mozaik agents run concurrently through native loops, inspect live evidence, use Thred's shared board and durable memory, stream the same runtime to Mozaik Cloud when configured, expose their work as an inspectable timeline, and return a synthesis that remains useful even when one agent fails.
+Turn Thred into a real collaborative-agent workspace. A user submits one task; four named Mozaik jobs—Product Lead, Frontend Builder, Backend Builder, and QA & Release—run concurrently through native loops, read and publish to the same shared board, stream the same runtime to Mozaik Cloud when configured, expose their work as inspectable handoffs, and return a readable synthesis rather than raw JSON.
 
 ## Implementation
 - Keep `@mozaik-ai/core` as the runtime layer: `defineRuntime` creates the shared space, `defineAgentModule` creates specialized participants, and each participant now runs through native `createLoop`/`runLoop` state transitions rather than a custom OpenAI tool loop.
@@ -10,7 +10,7 @@ Turn Thred into a real collaborative-agent workspace. A user submits one goal; t
 - Make the run model inspectable: expose each agent's current action, tool-call count, finding count, memory-write count, structured brief, errors, and the full event timeline. Persist runs, events, findings, and source metadata in PostgreSQL where the existing schema supports it; keep the in-process map for low-latency polling and restart recovery.
 - Treat partial failure as a valid collaborative outcome: one failed agent must not erase completed evidence. The run completes with a warning when at least one agent produces a result, and the synthesis explicitly identifies failed roles and missing evidence.
 - Add a workspace run-history endpoint so completed investigations can be reopened and replayed rather than disappearing after one screen.
-- Redesign only the existing Thred Mozaik view: use the current paper/ink/moss palette and typography, but add a workflow rail, live activity timeline, evidence/source cards, agent brief sections, memory state, synthesis, run history, quick-start goals, and a clear new-run action. No fake or decorative progress.
+- Redesign only the existing Thred Mozaik view: use the current paper/ink/moss palette and typography, but present named job cards for Product, Frontend, Backend, and QA & Release; keep the workflow rail, live activity timeline, evidence/source cards, readable handoff sections, memory state, synthesis, run history, quick-start goals, and a clear new-run action. No fake or decorative progress.
 - Keep Clerk authentication, Vercel routing, Render API/DB, Prisma migrations, and MCP flows intact. No secrets are shipped to the browser.
 
 ## Project structure
