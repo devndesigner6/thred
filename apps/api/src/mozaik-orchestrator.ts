@@ -353,7 +353,8 @@ function rawAnswerFromLoop(loop: { completedOperations: readonly any[] }) {
 function answerFromLoop(loop: { completedOperations: readonly any[] }) {
   const answer = rawAnswerFromLoop(loop);
   try {
-    const parsed = JSON.parse(answer) as Record<string, unknown>;
+    const candidate = answer.match(/\{[\s\S]*\}/)?.[0] ?? answer.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/i, "").trim();
+    const parsed = JSON.parse(candidate) as Record<string, unknown>;
     return Object.entries(parsed)
       .map(([key, value]) => {
         const label = key.replace(/([A-Z])/g, " $1").replace(/^./, (letter) => letter.toUpperCase());
