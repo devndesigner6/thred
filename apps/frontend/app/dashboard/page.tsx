@@ -1158,7 +1158,7 @@ function DashboardContent({
             <div role="status" className="flex items-center justify-center gap-2 border-b border-[#ecdcb0] bg-[#fbf3dc] px-4 py-2 text-center text-[12.5px] leading-snug text-[#6b5313]">
               <span aria-hidden="true" className="size-1.5 shrink-0 rounded-full bg-[#d4a017]" />
               <span>
-                External memory connector unavailable — investigation history is still preserved in Thred.
+                External memory connector unavailable — task history is still preserved in Thred.
               </span>
             </div>
             <div className="flex h-12 items-center gap-2 border-b border-[#eceeea] bg-white/90 px-4 backdrop-blur sm:px-5 lg:hidden">
@@ -1585,7 +1585,7 @@ function MozaikTeamRun({
     });
     const body = (await response.json().catch(() => null)) as { run?: MozaikRun; error?: string } | null;
     if (!response.ok || !body?.run) {
-      setError(body?.error ?? "The investigation could not start.");
+      setError(body?.error ?? "The team task could not start.");
       setStarting(false);
       return;
     }
@@ -1653,7 +1653,7 @@ function MozaikTeamRun({
               <p className="text-[13px] leading-6 text-[#747770]">The shared board is empty for now. The agents will publish here as their loops progress.</p>
             )}
           </Section>
-          <Section title="Durable memory" description="Long-term memory is separate from the live investigation and can be connected per workspace.">
+          <Section title="Durable memory" description="Long-term memory is separate from the live team task and can be connected per workspace.">
             {run.memoryWrites.length ? (
               <div className="space-y-3">
                 {run.memoryWrites.map((memory, index) => (
@@ -1738,7 +1738,7 @@ function DeepMozaikTeamRun({
     setError(null);
     const response = await request(`/api/workspaces/${workspace.slug}/mozaik/runs/${id}`);
     if (!response.ok) {
-      setError("That investigation could not be reopened.");
+      setError("That team task could not be reopened.");
       return;
     }
     const body = (await response.json()) as { run: MozaikRun };
@@ -1759,7 +1759,7 @@ function DeepMozaikTeamRun({
     });
     const body = (await response.json().catch(() => null)) as { run?: MozaikRun; error?: string } | null;
     if (!response.ok || !body?.run) {
-      setError(body?.error ?? "The investigation could not start.");
+      setError(body?.error ?? "The team task could not start.");
       setStarting(false);
       return;
     }
@@ -1825,17 +1825,17 @@ function DeepMozaikTeamRun({
             ))}
           </div>
           <div className="mt-8 border-t border-[#e8e8e4] pt-5">
-            <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-[#8a8c86]">Recent investigations</p>
-            {loadingHistory ? <p className="mt-3 text-[11px] text-[#8a8c86]">Loading history…</p> : history.length ? <div className="mt-3 space-y-2">{history.slice(0, 5).map((item) => <button key={item.id} type="button" onClick={() => void openRun(item.id)} className="block w-full truncate text-left text-[11px] text-[#5f665c] hover:text-[#171717]">{item.goal}</button>)}</div> : <p className="mt-3 text-[11px] leading-4 text-[#8a8c86]">Your completed investigations will stay here.</p>}
+            <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-[#8a8c86]">Recent team tasks</p>
+            {loadingHistory ? <p className="mt-3 text-[11px] text-[#8a8c86]">Loading history…</p> : history.length ? <div className="mt-3 space-y-2">{history.slice(0, 5).map((item) => <button key={item.id} type="button" onClick={() => void openRun(item.id)} className="block w-full truncate text-left text-[11px] text-[#5f665c] hover:text-[#171717]">{item.goal}</button>)}</div> : <p className="mt-3 text-[11px] leading-4 text-[#8a8c86]">Your completed team tasks will stay here.</p>}
           </div>
         </aside>
 
         <main className="min-w-0 bg-[#fcfdfa]">
           {!run && (
-            <Section title="Give the team a goal" description="Start with a decision, domain, comparison, or risk. The agents will decide which evidence tools to use.">
+            <Section title="Give the team a task" description="Ask the team to design, build, compare, investigate, or review something real.">
               <textarea value={goal} onChange={(event) => setGoal(event.target.value)} placeholder="Example: Investigate helixoxide.xyz and tell me what is verifiable, unknown, and risky." rows={5} className={`${ui.input} resize-y leading-6`} disabled={starting} />
               <div className="mt-4 flex flex-wrap items-center gap-3">
-                <button type="button" onClick={() => void start()} disabled={starting} className={ui.primary}>{starting ? "Opening investigation…" : "Start investigation"}<PixelArrowRight className="size-3" /></button>
+                <button type="button" onClick={() => void start()} disabled={starting} className={ui.primary}>{starting ? "Starting team task…" : "Start team task"}<PixelArrowRight className="size-3" /></button>
                 <span className="text-[11px] text-[#8a8c86]">Runs four named jobs concurrently through Mozaik and keeps their handoffs on the shared board.</span>
               </div>
               <div className="mt-6 flex flex-wrap gap-2">{presets.map((preset) => <button key={preset} type="button" onClick={() => { setGoal(preset); void start(preset); }} disabled={starting} className="rounded-full border border-[#e1e4de] bg-[#fafbf8] px-3 py-1.5 text-left text-[11px] text-[#697066] hover:border-[#b7c4b2]">{preset}</button>)}</div>
@@ -1845,7 +1845,7 @@ function DeepMozaikTeamRun({
 
           {run && (
             <>
-              <Section title="Investigation status" description={`Run ${run.id.slice(0, 8)} · ${run.status === "running" ? "live updates every second" : "reopenable from history"}`}>
+              <Section title="Team task status" description={`Run ${run.id.slice(0, 8)} · ${run.status === "running" ? "live updates every second" : "reopenable from history"}`}>
                 <div className="flex flex-wrap items-center gap-2">
                   <span className={`rounded-full px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.1em] ${run.status === "completed" ? "bg-[#edf5eb] text-[#5f8059]" : run.status === "failed" ? "bg-[#fbefed] text-[#a14a3b]" : "bg-[#fbf5df] text-[#9b7613]"}`}>{run.status}</span>
                   <span className="text-[12px] text-[#747770]">{completedAgents} complete</span><span className="text-[#c7cbc3]">·</span><span className="text-[12px] text-[#747770]">{activeAgents} active</span>{failedAgents > 0 && <><span className="text-[#c7cbc3]">·</span><span className="text-[12px] text-[#a14a3b]">{failedAgents} needs attention</span></>}
@@ -1866,7 +1866,7 @@ function DeepMozaikTeamRun({
               </Section>
 
               <Section title="Durable memory" description="This panel distinguishes long-term workspace memory from live screen state.">
-                {run.memoryWrites.length ? <div className="space-y-2">{run.memoryWrites.map((memory, index) => <div key={`${memory.createdAt}-${index}`} className="rounded-[8px] border border-[#dce7d9] bg-[#f4f8f2] px-4 py-3"><div className="flex justify-between gap-3"><p className="font-mono text-[10px] uppercase tracking-[0.08em] text-[#6e8b69]">{memory.agent} · durable write</p><span className="font-mono text-[10px] text-[#a2a79f]">{formatTime(memory.createdAt)}</span></div><p className="mt-1 text-[12px] leading-5 text-[#454a43]">{memory.text}</p></div>)}</div> : <p className="text-[13px] leading-6 text-[#747770]">No durable writes are visible for this run. Shared findings and the investigation history remain available in Thred.</p>}
+                {run.memoryWrites.length ? <div className="space-y-2">{run.memoryWrites.map((memory, index) => <div key={`${memory.createdAt}-${index}`} className="rounded-[8px] border border-[#dce7d9] bg-[#f4f8f2] px-4 py-3"><div className="flex justify-between gap-3"><p className="font-mono text-[10px] uppercase tracking-[0.08em] text-[#6e8b69]">{memory.agent} · durable write</p><span className="font-mono text-[10px] text-[#a2a79f]">{formatTime(memory.createdAt)}</span></div><p className="mt-1 text-[12px] leading-5 text-[#454a43]">{memory.text}</p></div>)}</div> : <p className="text-[13px] leading-6 text-[#747770]">No durable writes are visible for this run. Shared findings and team-task history remains available in Thred.</p>}
               </Section>
 
               {run.finalAnswer && <Section title="Team synthesis" description="The answer is assembled after the concurrent loops, with limits kept visible."><div className="rounded-[10px] border border-[#e4e7e1] bg-white p-5"><p className="whitespace-pre-wrap text-[13px] leading-6 text-[#454a43]">{run.finalAnswer}</p></div></Section>}
