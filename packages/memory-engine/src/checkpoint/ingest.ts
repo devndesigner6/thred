@@ -4,9 +4,9 @@ import {
   type MemoryExtractionModel,
   type MemoryExtractionRequest,
 } from "@repo/memory-extractor";
-import { writeLongTermMemories } from "@repo/hydra";
+import { writeLongTermMemories } from "@repo/memory-store";
 import { memorySemanticKey } from "../shared/entity/entity-resolver.js";
-import { HydraMemoryLookup } from "./long-term/hydra/hydra-lookup.js";
+import { StoreMemoryLookup } from "./long-term/store/store-lookup.js";
 import {
   processLongTermClaim,
   resolveLongTermClaim,
@@ -18,7 +18,7 @@ import {
 import { mapWithLimit } from "./map-limit.js";
 import { saveWorkingMemoryHandoff } from "./short-term/save-working-memory.js";
 
-/** Unique facts cannot supersede each other, so their Hydra lookups overlap. */
+/** Unique facts cannot supersede each other, so their memory store lookups overlap. */
 const uniqueClaimLookupLimit = 5;
 
 export type IngestSessionInput = {
@@ -26,7 +26,7 @@ export type IngestSessionInput = {
   sessionId: string;
   evidenceEventIds?: string[];
   occurredAt?: string;
-  /** Evaluation runs use isolated HydraDB stores, not product Workspace rows. */
+  /** Evaluation runs use isolated PostgreSQL stores, not product Workspace rows. */
   persistWorkingMemory?: boolean;
   extractionRequest: MemoryExtractionRequest;
 };
@@ -44,7 +44,7 @@ type BatchItem = {
 
 /**
  * The end-to-end write path: session material becomes a Prisma handoff and,
- * after revision resolution, durable HydraDB memories.
+ * after revision resolution, durable PostgreSQL memories.
  */
 export async function ingestSession(
   input: IngestSessionInput,
@@ -52,7 +52,7 @@ export async function ingestSession(
 ) {
   const extracted = await extractRelevantContext(dependencies.model, input.extractionRequest);
   const claims = extracted.longTerm;
-  const lookup: MemoryLookup = dependencies.memoryLookup ?? new HydraMemoryLookup();
+  const lookup: MemoryLookup = dependencies.memoryLookup ?? new StoreMemoryLookup();
   const processed: ProcessedLongTermClaim[] = [];
 
   // Count how many claims in this session talk about the same subject + predicate.
@@ -88,7 +88,7 @@ export async function ingestSession(
   }
 
   // Step 1: claims with a unique subject + predicate cannot supersede each
-  // other, so their lookups run a few at a time, then one HydraDB write.
+  // other, so their lookups run a few at a time, then one PostgreSQL write.
   const unique: Array<{ index: number; claim: LongTermMemoryClaim }> = [];
   for (const [index, claim] of claims.entries()) {
     if (!isRepeated(claim)) unique.push({ index, claim });
@@ -111,7 +111,7 @@ export async function ingestSession(
     const id = response.data?.results?.[writeIndex]?.id;
     processed[item.index] = {
       decision: item.resolved.decision,
-      hydraResponse: { data: { results: id ? [{ id }] : [] } },
+      memoryResponse: { data: { results: id ? [{ id }] : [] } },
     };
     if (id) rememberWrite(item.claim, id);
   }
@@ -123,15 +123,15 @@ export async function ingestSession(
     const result = await processLongTermClaim(lookup, claimInput(claim));
     processed[index] = result;
 
-    const writtenId = result.hydraResponse?.data?.results?.find((item) => item.id)?.id;
+    const writtenId = result.memoryResponse?.data?.results?.find((item) => item.id)?.id;
     if (writtenId) rememberWrite(claim, writtenId);
   }
 
-  // Collect every HydraDB id we wrote, to link them from the working-memory row.
-  const hydraMemoryIds: string[] = [];
+  // Collect every PostgreSQL id we wrote, to link them from the working-memory row.
+  const memoryIds: string[] = [];
   for (const result of processed) {
-    for (const item of result.hydraResponse?.data?.results ?? []) {
-      if (item.id) hydraMemoryIds.push(item.id);
+    for (const item of result.memoryResponse?.data?.results ?? []) {
+      if (item.id) memoryIds.push(item.id);
     }
   }
 
@@ -141,7 +141,7 @@ export async function ingestSession(
       workspaceId: input.workspaceId,
       sessionId: input.sessionId,
       workingMemory: extracted.workingMemory,
-      hydraMemoryIds,
+      memoryIds,
     });
   }
 

@@ -18,7 +18,7 @@ services:
     startCommand: npx tsx apps/api/src/index.ts
     envVars:
       - key: NODE_VERSION
-        value: "20"
+        value: "24"
       - key: NODE_ENV
         value: production
       - key: DATABASE_URL
@@ -37,11 +37,16 @@ services:
         sync: false
       - key: BETTER_AUTH_SECRET
         sync: false
-      - key: HYDRA_DB_API_KEY
-        sync: false
       - key: MODEL_PROVIDER
         value: openai
       - key: OPENAI_API_KEY
         sync: false
       - key: MOZAIK_MODEL
         value: gpt-5.4-mini
+      # Optional Cloud telemetry: configure both values from the same account.
+      - key: MOZAIK_API_KEY
+        sync: false
+      - key: MOZAIK_PROJECT_ID
+        sync: false
+      - key: MOZAIK_REDACTION
+        value: content

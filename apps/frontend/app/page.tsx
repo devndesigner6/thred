@@ -4,7 +4,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { useOptionalUser } from "@/lib/clerk-safe";
-import { ArrowRight, ArrowUpRight } from "lucide-react";
+import { ArrowRight, ArrowUpRight, Database } from "lucide-react";
 import { SiClaude, SiCline, SiCursor, SiModelcontextprotocol, SiWindsurf } from "react-icons/si";
 import { RiOpenaiFill } from "react-icons/ri";
 
@@ -27,14 +27,6 @@ function ThreadMark({ className = "", bevel = false }: { className?: string; bev
       <circle cx="7.25" cy="9.1" r="0.52" fill="#202320" />
       <circle cx="20.75" cy="20.57" r="0.52" fill="#202320" />
     </svg>
-  );
-}
-
-function HydraMark({ className = "" }: { className?: string }) {
-  return (
-    <span aria-label="HydraDB" className={`relative block overflow-hidden ${className}`}>
-      <Image src="/hydradb-logo-white.png" alt="" width={1180} height={215} className="absolute left-1/2 top-[9.8%] h-full max-w-none w-auto -translate-x-[7.5%]" />
-    </span>
   );
 }
 
@@ -88,7 +80,6 @@ const testimonials = [
   { name: "Harnoor Singh", handle: "iHarnoorSingh", verified: true, date: "Aug 18, 2026", id: "2089829610427216278", text: "this is lit!! better memory and reduces the need of openrouter" },
   { name: "waishnav", handle: "wshxnv", verified: true, date: "Aug 18, 2026", id: "2089760130250440770", text: "good work :)\n\nat some point i was gonna build smth similar the context layer for codebases but aparently models got better at exploring codebases on demand, so dropped that idea\n\nyou should do eval/benchmark btw" },
   { name: "Arinjay Wyawhare", handle: "jaywyawhare", verified: true, date: "Aug 19, 2026", id: "2090036443603456021", text: "Lfg, good idea and great execution." },
-  { name: "Saurabh", handle: "_saurabh__xd", verified: false, date: "Aug 18, 2026", id: "2089719243562733899", text: "Hire him @hydra_db" },
   { name: "aniketh", handle: "Aniketh_Deb", verified: true, date: "Aug 18, 2026", id: "2089718911063453773", text: "nice , @contextkingceo  have a look at it" },
   { name: "Vyom", handle: "HelloVyom", verified: true, date: "Aug 18, 2026", id: "2089733478002884981", text: "Great work bro!!!" },
   { name: "Atharva", handle: "AtharvaXDevs", verified: true, date: "Aug 18, 2026", id: "2089732744599535817", text: "crazy work man" },
@@ -233,14 +224,14 @@ export default function Home() {
         <section id="memory" className="rule-fade frame-marks border-b px-6 py-12 text-center sm:px-8 sm:py-14">
           <div className="mx-auto max-w-[620px]">
             <h2 className="text-balance text-[22px] font-medium leading-[1.12] tracking-[-0.045em] text-[#252724] sm:text-[28px]">One memory for every agent that touches the work.</h2>
-            <p className="mx-auto mt-4 max-w-[520px] text-[13px] leading-6 text-[#70766f] sm:text-[14px]">Claude saves the decision and the next step. Thread resolves what changed. Codex continues with the context it needs.</p>
+            <p className="mx-auto mt-4 max-w-[520px] text-[13px] leading-6 text-[#70766f] sm:text-[14px]">Claude saves decisions and checkpoints in your PostgreSQL-backed workspace. Codex retrieves that history and continues with the next step.</p>
 
             <div className="mx-auto mt-8 flex w-fit items-center gap-1.5 bevel-tray rounded-[22px] p-2 sm:gap-3 sm:p-3">
               <div className="grid size-12 place-items-center sm:size-[60px] bevel-tile rounded-[16px] text-[#575d58] transition-transform duration-200 ease-out hover:scale-110"><SiClaude className="size-6 sm:size-7" /></div>
               <ArrowRight className="size-3 shrink-0 text-[#9ba29c] sm:size-4" strokeWidth={1.5} />
               <div className="grid size-12 place-items-center sm:size-[60px] transition-transform duration-200 ease-out hover:scale-110"><ThreadMark bevel className="size-12 sm:size-[60px]" /></div>
               <ArrowRight className="size-3 shrink-0 text-[#9ba29c] sm:size-4" strokeWidth={1.5} />
-              <div className="grid size-12 place-items-center sm:size-[60px] bevel-tile rounded-[16px] transition-transform duration-200 ease-out hover:scale-110"><HydraMark className="size-7 sm:size-8" /></div>
+              <div className="grid size-12 place-items-center sm:size-[60px] bevel-tile rounded-[16px] transition-transform duration-200 ease-out hover:scale-110"><Database aria-label="PostgreSQL workspace memory" className="size-7 sm:size-8 text-[#575d58]" /></div>
               <ArrowRight className="size-3 shrink-0 text-[#9ba29c] sm:size-4" strokeWidth={1.5} />
               <div className="grid size-12 place-items-center sm:size-[60px] bevel-tile rounded-[16px] text-[#575d58] transition-transform duration-200 ease-out hover:scale-110"><RiOpenaiFill className="size-6 sm:size-7" /></div>
             </div>
@@ -250,6 +241,13 @@ export default function Home() {
         </section>
 
       </div>
+
+      <section id="studio" className="mx-auto max-w-[1000px] border-x border-b px-6 py-12 sm:px-8">
+        <h2 className="text-[24px] tracking-[-0.04em] text-[#252724]">Plan the next feature with a coordinated team.</h2>
+        <p className="mt-4 max-w-[650px] text-[14px] leading-6 text-[#70766f]">In Thred agent studio, Product scopes your goal, Frontend and Backend develop their plans in parallel, and QA reviews the handoffs for gaps and risks. Shared artifacts and a final synthesis give you a plan to implement and verify.</p>
+        <p className="mt-3 max-w-[650px] text-[12px] leading-6 text-[#70766f]">Studio produces planning artifacts. Repository edits, executed tests, and deployment remain separate steps.</p>
+        <Link href="/dashboard?view=mozaik" className="landing-link mt-5 inline-flex items-center gap-2 text-[13px] text-[#4f754b]">Open agent studio <ArrowRight className="size-3.5" /></Link>
+      </section>
 
       <section className="page-frame mx-auto max-w-[1000px] border-x px-6 pb-24 pt-16 sm:px-8 sm:pb-32 sm:pt-20">
           <div className="mx-auto max-w-[620px] border-b border-[#e8e8e4] pb-10 text-center sm:pb-12">

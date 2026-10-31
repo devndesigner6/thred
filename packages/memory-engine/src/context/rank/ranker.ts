@@ -1,7 +1,8 @@
-import type { HydraChunk, HydraMemoryQueryResponse } from "@repo/hydra";
+import type { MemoryChunk, MemoryQueryResponse } from "@repo/memory-store";
 import { queryKeywords } from "./query-intent.js";
 
 export type RankedMemory = {
+  isCurrent?: boolean;
   id: string;
   text: string;
   score: number;
@@ -74,7 +75,7 @@ export function lexicalOverlap(query: string, text: string): number {
 }
 
 /** Scores one recall chunk. Returns null when the chunk has no text or id. */
-function rankChunk(chunk: HydraChunk, query: string | undefined): RankedMemory | null {
+function rankChunk(chunk: MemoryChunk, query: string | undefined): RankedMemory | null {
   const text = chunk.chunkContent?.trim();
   const id = chunk.id ?? chunk.chunkUuid;
   if (!text || !id) return null;
@@ -95,6 +96,7 @@ function rankChunk(chunk: HydraChunk, query: string | undefined): RankedMemory |
   }
 
   return {
+    isCurrent: chunk.isCurrent,
     id,
     text,
     score,
@@ -119,7 +121,7 @@ function rankChunk(chunk: HydraChunk, query: string | undefined): RankedMemory |
 
 /** Scores recall chunks without inventing a new answer. Best first. */
 export function rankMemories(
-  response: HydraMemoryQueryResponse,
+  response: MemoryQueryResponse,
   options?: { query?: string },
 ): RankedMemory[] {
   const query = options?.query?.trim();

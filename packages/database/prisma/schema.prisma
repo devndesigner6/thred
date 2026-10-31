@@ -159,7 +159,7 @@ model WorkingCheckpoint {
   task           String
   status         CheckpointStatus
   payload        Json
-  hydraMemoryIds String[]         @default([])
+  memoryIds String[]         @default([])
   createdAt      DateTime         @default(now())
   updatedAt      DateTime         @updatedAt
   workspace      Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
@@ -247,4 +247,21 @@ model MozaikFinding {
   run       MozaikRun @relation(fields: [runId], references: [id], onDelete: Cascade)
 
   @@index([runId, createdAt])
+}
+
+model MemoryFact {
+  id          String   @id @default(uuid())
+  workspaceId String
+  sessionId   String
+  kind        String
+  text        String
+  semanticKey String?
+  value       String?
+  currentKey  String?
+  isCurrent   Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  @@index([workspaceId, createdAt])
+  @@index([workspaceId, semanticKey, createdAt])
+  @@unique([workspaceId, currentKey])
 }

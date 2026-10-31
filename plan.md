@@ -4,6 +4,7 @@
 Turn Thred into a real collaborative-agent workspace. A user submits one task; four named Mozaik jobs—Product Lead, Frontend Builder, Backend Builder, and QA & Release—run concurrently through native loops, read and publish to the same shared board, stream the same runtime to Mozaik Cloud when configured, expose their work as inspectable handoffs, and return a readable synthesis rather than raw JSON.
 
 ## Implementation
+- Store all durable memory, revision links, checkpoints, and run history in PostgreSQL through `@repo/memory-store`; use lexical full-text retrieval with no separate memory-service credentials.
 - Keep `@mozaik-ai/core` as the runtime layer: `defineRuntime` creates the shared space, `defineAgentModule` creates specialized participants, and each participant now runs through native `createLoop`/`runLoop` state transitions rather than a custom OpenAI tool loop.
 - Stream the live runtime to Mozaik Cloud through the official exporter when `MOZAIK_API_KEY` is configured; the existing runtime notebook exposes the real session link and reports Cloud connection errors honestly.
 - Expand the real tool surface beyond memory-only orchestration: public URL fetch with bounded text extraction, DNS lookup, durable memory recall/write, shared-board read, and finding publication. Every tool call emits a persisted runtime event and records source metadata when applicable.

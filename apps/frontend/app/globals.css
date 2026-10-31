@@ -804,3 +804,11 @@
     }
   }
 }
+
+/* Studio responses may contain unbroken URLs, identifiers, and JSON. */
+.studio-content { min-width: 0; overflow-wrap: anywhere; }
+.studio-content :is(article, section, main, details, li, pre) { min-width: 0; max-width: 100%; }
+.studio-content :is(p, li, a, h3, pre) { overflow-wrap: anywhere; }
+.studio-content pre { white-space: pre-wrap; }
+.studio-content section { grid-template-columns: minmax(0, 1fr); gap: 1rem; padding: 1.5rem; }
+.studio-content li > span:last-child { min-width: 0; white-space: pre-wrap; }

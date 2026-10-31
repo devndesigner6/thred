@@ -50,9 +50,9 @@ CLERK_PUBLISHABLE_KEY=pk_live_...
 CLERK_SECRET_KEY=sk_live_...
 CLERK_JWT_KEY=<optional Clerk JWKS public key for networkless verification>
 CREDENTIAL_ENCRYPTION_SECRET=<same value as Vercel>
-HYDRA_DB_API_KEY=<HydraDB key>
 MODEL_PROVIDER=openai
-OPENAI_API_KEY=<server-side model key, if using OpenAI extraction>
+OPENAI_API_KEY=<required for Studio; also used for OpenAI extraction>
+MOZAIK_MODEL=gpt-5.4-mini
 ```
 
 Optional model variables from `.env.example` can be added when needed:
@@ -69,6 +69,8 @@ OPENROUTER_API_KEY=
 ```
 
 Keep `BETTER_AUTH_SECRET` on Render too if the existing database contains BYOK records encrypted with it.
+
+Use Node 24+ on both hosts. PostgreSQL stores durable memory, run history, and checkpoint/resume data. For optional Mozaik Cloud telemetry, configure `MOZAIK_API_KEY` and `MOZAIK_PROJECT_ID` from the same Cloud account, plus `MOZAIK_REDACTION=content`. Never expose these credentials in frontend variables or screenshots. Run one API instance until orchestration uses a shared job worker; process-interrupted agent execution does not resume automatically.
 
 ## 4. Database migration
 

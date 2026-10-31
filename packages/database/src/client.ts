@@ -10,6 +10,8 @@ loadEnv({ path: path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../.
 
 const adapter = new PrismaPg({
     connectionString: process.env.DATABASE_URL,
+    connectionTimeoutMillis: 10_000,
+    query_timeout: 15_000,
 });
 
 const globalForPrisma = globalThis as unknown as { prisma: PrismaClient };

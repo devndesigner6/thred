@@ -1,15 +1,17 @@
 import "dotenv/config";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { createCipheriv, createHash, randomBytes } from "node:crypto";
 import express, { type NextFunction, type Request, type Response } from "express";
 import { clerkClient, clerkMiddleware, getAuth } from "@clerk/express";
 import { prisma, upsertLocalUser } from "@repo/db";
 import { mcpRouter } from "./mcp-routes.js";
-import { getMozaikRun, listMozaikRuns, startMozaikRun } from "./mozaik-orchestrator.js";
+import { cancelMozaikRun, getMozaikRun, listMozaikRuns, mozaikCapabilities, startMozaikRun } from "./mozaik-orchestrator.js";
 
-const app = express();
+export const app = express();
 const port = Number(process.env.PORT ?? 8080);
 const frontendOrigin = process.env.FRONTEND_ORIGIN ?? "http://localhost:3000";
-const clerkConfigured = Boolean(process.env.CLERK_PUBLISHABLE_KEY && process.env.CLERK_SECRET_KEY);
+const clerkConfigured = Boolean((process.env.CLERK_PUBLISHABLE_KEY || process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY) && process.env.CLERK_SECRET_KEY);
 const rateLimitWindowMs = 60_000;
 const rateLimitMaxRequests = 120;
 
@@ -22,6 +24,7 @@ type AuthenticatedRequest = Request & {
 
 if (clerkConfigured) {
     app.use(clerkMiddleware({
+        publishableKey: process.env.CLERK_PUBLISHABLE_KEY || process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY,
         authorizedParties: [frontendOrigin],
         ...(process.env.CLERK_JWT_KEY ? { jwtKey: process.env.CLERK_JWT_KEY } : {}),
     }));
@@ -105,16 +108,37 @@ app.get("/health", (_req, res) => res.json({ status: "ok" }));
 
 app.use("/api/mcp", mcpRouter);
 
+app.get("/api/workspaces/:slug/mozaik/capabilities", requireAuth, async (req: AuthenticatedRequest, res, next) => {
+    try {
+        if (!await workspaceForUser(req.user!.id, param(req, "slug"))) return res.status(404).json({ error: "Workspace not found" });
+        res.json(await mozaikCapabilities());
+    } catch (error) { next(error); }
+});
+
+app.post("/api/workspaces/:slug/mozaik/runs/:runId/cancel", requireAuth, async (req: AuthenticatedRequest, res, next) => {
+    try {
+        const workspace = await workspaceForUser(req.user!.id, param(req, "slug"));
+        if (!workspace) return res.status(404).json({ error: "Workspace not found" });
+        const run = await getMozaikRun(param(req, "runId"), workspace.id);
+        if (run.workspaceId !== workspace.id) return res.status(404).json({ error: "Mozaik run not found" });
+        res.json({ run: await cancelMozaikRun(run.id, workspace.id) });
+    } catch (error) {
+        if (error instanceof Error && error.message === "Mozaik run not found") return res.status(404).json({ error: error.message });
+        next(error);
+    }
+});
+
 /** Starts a real concurrent Mozaik team run for one Thred workspace. */
 app.post("/api/workspaces/:slug/mozaik/runs", requireAuth, async (req: AuthenticatedRequest, res, next) => {
     try {
         const workspace = await workspaceForUser(req.user!.id, param(req, "slug"));
         if (!workspace) return res.status(404).json({ error: "Workspace not found" });
         const goal = typeof req.body?.goal === "string" ? req.body.goal : "";
-        const run = startMozaikRun(workspace.id, goal);
+        const run = await startMozaikRun(workspace.id, goal);
         res.status(202).json({ run });
     } catch (error) {
-        if (error instanceof Error && /Add an AI provider key|Goal is required|Goal must be/.test(error.message)) {
+        if (error instanceof Error && /already active/.test(error.message)) return res.status(409).json({ error: error.message });
+        if (error instanceof Error && /OPENAI_API_KEY is required|Goal must contain/.test(error.message)) {
             return res.status(400).json({ error: error.message });
         }
         next(error);
@@ -135,7 +159,7 @@ app.get("/api/workspaces/:slug/mozaik/runs/:runId", requireAuth, async (req: Aut
     try {
         const workspace = await workspaceForUser(req.user!.id, param(req, "slug"));
         if (!workspace) return res.status(404).json({ error: "Workspace not found" });
-        const run = await getMozaikRun(param(req, "runId"));
+        const run = await getMozaikRun(param(req, "runId"), workspace.id);
         if (run.workspaceId !== workspace.id) return res.status(404).json({ error: "Mozaik run not found" });
         res.json({ run });
     } catch (error) {
@@ -231,7 +255,7 @@ app.patch("/api/workspaces/:slug", requireAuth, async (req: AuthenticatedRequest
     } catch (error) { next(error); }
 });
 
-/** Dashboard data stays operational: checkpoints/evals live in Postgres; durable memory remains in HydraDB. */
+/** Dashboard data stays operational: checkpoints/evals live in Postgres; durable memory remains in PostgreSQL. */
 app.get("/api/workspaces/:slug/overview", requireAuth, async (req: AuthenticatedRequest, res, next) => {
     try {
         const slug = param(req, "slug");
@@ -359,6 +383,8 @@ app.use((error: unknown, _req: Request, res: Response, _next: NextFunction) => {
     res.status(500).json({ error: "Internal server error" });
 });
 
-app.listen(port, () => {
-    console.log(`Backend running on http://localhost:${port}`);
-});
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+    app.listen(port, () => {
+        console.log(`Backend running on http://localhost:${port}`);
+    });
+}

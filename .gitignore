@@ -2,6 +2,8 @@
 
 # Dependencies
 node_modules
+.audit/
+*.tsbuildinfo
 .pnp
 .pnp.js
 

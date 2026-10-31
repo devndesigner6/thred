@@ -1,9 +1,9 @@
 import { Router } from "express";
 import {
-  buildMemoryContext,
+  buildWorkspaceContext,
   buildMemoryHistory,
   CachedMemoryLookup,
-  HydraMemoryLookup,
+  StoreMemoryLookup,
   ingestSession,
   resumeWithMemory,
 } from "@repo/memory-engine";
@@ -23,7 +23,7 @@ mcpRouter.post("/context", async (req: ThredRequest, res, next) => {
     // context hides them and returns only what is current.
     const result = req.body?.includeHistory === true
       ? await buildMemoryHistory({ workspaceId: req.workspaceId!, query })
-      : await buildMemoryContext({ workspaceId: req.workspaceId!, query });
+      : await buildWorkspaceContext({ workspaceId: req.workspaceId!, query });
     res.json(result);
   } catch (error) {
     next(error);
@@ -61,7 +61,7 @@ mcpRouter.post("/checkpoint", async (req: ThredRequest, res, next) => {
           evidenceReferences,
         },
       },
-      { model, memoryLookup: new CachedMemoryLookup(new HydraMemoryLookup()) },
+      { model, memoryLookup: new CachedMemoryLookup(new StoreMemoryLookup()) },
     );
 
     const noHandoffMessage =

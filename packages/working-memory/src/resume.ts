@@ -13,13 +13,13 @@ export type ResumeHandoff = {
   taskKey: string;
   status: CheckpointStatus;
   payload: CheckpointPayload;
-  hydraMemoryIds: string[];
+  memoryIds: string[];
   updatedAt: Date;
 };
 
 /**
  * Produces a compact, provider-neutral handoff. The MCP layer can add
- * long-term HydraDB context using `hydraMemoryIds` in a later step.
+ * long-term PostgreSQL context using `memoryIds` in a later step.
  */
 export async function resumeWork(input: ResumeWorkInput): Promise<ResumeHandoff | null> {
   const checkpoint = await findLatestResumableCheckpoint(input);
@@ -32,7 +32,7 @@ export async function resumeWork(input: ResumeWorkInput): Promise<ResumeHandoff 
     taskKey: checkpoint.taskKey,
     status: checkpoint.status,
     payload: checkpoint.payload as CheckpointPayload,
-    hydraMemoryIds: checkpoint.hydraMemoryIds,
+    memoryIds: checkpoint.memoryIds,
     updatedAt: checkpoint.updatedAt,
   };
 }

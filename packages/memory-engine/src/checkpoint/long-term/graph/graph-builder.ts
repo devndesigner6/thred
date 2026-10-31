@@ -1,6 +1,7 @@
-import type { LongTermMemoryInput, MemoryRelation } from "@repo/hydra";
+import type { LongTermMemoryInput, MemoryRelation } from "@repo/memory-store";
 import type { LongTermMemoryClaim } from "@repo/memory-extractor";
 import type { RevisionDecision } from "../revision/revision-resolver.js";
+import { memorySemanticKey } from "../../../shared/entity/entity-resolver.js";
 
 type MemoryScope = {
   workspaceId: string;
@@ -8,12 +9,11 @@ type MemoryScope = {
   evidenceEventIds: string[];
   occurredAt?: string;
 };
-// sentesces ke objexts atp, before sendint or writing it to hydradb tbh.
 /**
- * Turns an extracted claim into the object we save in HydraDB:
+ * Turns an extracted claim into the object we save in PostgreSQL:
  * readable text ("subject predicate value. Kind: ...") plus graph relations.
  */
-export function buildHydraMemory(
+export function buildStoredMemory(
   claim: LongTermMemoryClaim,
   decision: RevisionDecision,
   scope: MemoryScope,
@@ -43,8 +43,6 @@ export function buildHydraMemory(
   }
 
   const recordedAt = scope.occurredAt ? ` Recorded at: ${scope.occurredAt}.` : "";
-  // Keep the assertion first: HydraMemoryLookup can still identify a claim by
-  // subject + predicate, while the remaining fields make recall inspectable.
   const text = `${claim.subject} ${claim.predicate} ${claim.value}.`
     + ` Kind: ${claim.kind}. Confidence: ${claim.confidence}.`
     + `${recordedAt}${reason}${revisionNote}`
@@ -55,6 +53,8 @@ export function buildHydraMemory(
     sessionId: scope.sessionId,
     kind: claim.kind,
     text,
+    semanticKey: memorySemanticKey(claim.subject, claim.predicate),
+    value: claim.value,
     confidence: claim.confidence,
     evidenceEventIds: scope.evidenceEventIds,
     sourceMessageIds: claim.sourceMessageIds,

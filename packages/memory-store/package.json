@@ -1,0 +1,10 @@
+{
+  "name": "@repo/memory-store",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": { ".": "./src/index.ts" },
+  "scripts": { "check-types": "tsc --noEmit", "test": "tsx --test \"src/**/*.test.ts\"" },
+  "dependencies": { "@repo/db": "*" },
+  "devDependencies": { "@repo/typescript-config": "*", "tsx": "^4.21.0", "typescript": "5.9.2" }
+}

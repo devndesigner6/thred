@@ -3,7 +3,6 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { config as loadEnv } from "dotenv";
 import { OpenAIMemoryExtractionModel } from "@repo/memory-extractor";
-import { getWorkspaceDatabaseStatus, provisionWorkspaceDatabase } from "@repo/hydra";
 import { loadDataset } from "./datasets/loaders.js";
 import { stratifiedSample } from "./datasets/stratified.js";
 import { summarizeMetrics } from "./metrics.js";
@@ -19,8 +18,6 @@ import type { FailedCaseSummary } from "./report.js";
 // npm workspace scripts execute from apps/evals, while local credentials live at
 // the repository root. Loading this explicitly keeps CLI invocation reproducible.
 loadEnv({ path: path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../.env") });
-// Benchmarks may wait on HydraDB rate limits. Product checkpoint calls use a 30s budget.
-process.env.HYDRA_LONG_RETRY = "1";
 
 function option(name: string) {
   const index = process.argv.indexOf(name);
@@ -31,7 +28,6 @@ const dataset = option("--dataset") as EvalDataset | undefined;
 const inputPath = option("--input");
 const workspaceId = option("--workspace");
 const caseId = option("--case-id");
-const hydraWorkspaceId = option("--hydra-workspace");
 const resume = process.argv.includes("--resume");
 const limitValue = option("--limit");
 const limit = limitValue ? Number(limitValue) : undefined;
@@ -60,9 +56,6 @@ if (!Number.isInteger(concurrency) || concurrency < 1) {
 if (!dataset || !inputPath || !workspaceId) {
   throw new Error("Usage: npm run eval --workspace=@repo/evals -- --dataset longmemeval-v2 --input path/to/data.json --workspace workspace-id");
 }
-if (hydraWorkspaceId && !caseId) {
-  throw new Error("--hydra-workspace requires --case-id so evaluation cases remain isolated");
-}
 
 let evalCases = await loadDataset(inputPath, dataset);
 if (caseId) {
@@ -80,25 +73,6 @@ const answerJudge = new OpenAIAnswerJudge();
 const extractor = new OpenAIMemoryExtractionModel();
 type RunResult = { evalCase: EvalCase; score: CaseScore; result: EvaluatedAnswer };
 const all: Record<EvalStrategy, RunResult[]> = { VECTOR_RAG: [], THRED: [] };
-
-async function waitForHydraDatabase(workspace: string) {
-  try {
-    await provisionWorkspaceDatabase(workspace);
-  } catch {
-    // A ConflictError means provisioning already started; keep polling status.
-  }
-  for (let attempt = 0; attempt < 180; attempt += 1) {
-    try {
-      const status = await getWorkspaceDatabaseStatus(workspace);
-      const ready = Boolean((status.data as { infra?: { readyForIngestion?: boolean } } | undefined)?.infra?.readyForIngestion);
-      if (ready) return;
-    } catch {
-      // Status may be unavailable while the database is still initializing.
-    }
-    await new Promise((resolve) => setTimeout(resolve, 2000));
-  }
-  throw new Error(`HydraDB workspace ${workspace} did not become ready in time`);
-}
 
 /** Runs `worker` over every case, with at most `concurrency` running at once. */
 async function runWithConcurrency(items: EvalCase[], worker: (item: EvalCase) => Promise<void>) {
@@ -160,19 +134,15 @@ for (const strategy of strategyFilter) {
   console.log(`[${strategy}] run=${run.id} cases=${evalCases.length}`);
   let completedCases = 0;
   await runWithConcurrency(evalCases, async (evalCase) => {
-    // Every LongMemEval record is an independent history. Reusing one memory
-    // database would allow facts from an earlier case to answer a later case.
-    // A named single-case evaluation can reuse a pre-provisioned, isolated
-    // HydraDB database. This avoids waiting for provisioning again while never
-    // sharing memories across benchmark histories.
-    const caseWorkspaceId = hydraWorkspaceId ?? `${workspaceId}_eval_${run.id}_${evalCase.id}`;
+    // Each case uses a separate PostgreSQL memory namespace to prevent
+    // facts from one benchmark history leaking into another case.
+    const caseWorkspaceId = `${workspaceId}_eval_${run.id}_${evalCase.id}`;
     let result: EvaluatedAnswer;
     let score: CaseScore;
     try {
       if (strategy === "VECTOR_RAG") {
         result = await runVectorRag(evalCase, answerModel);
       } else {
-        await waitForHydraDatabase(caseWorkspaceId);
         result = await runThredCase(evalCase, caseWorkspaceId);
       }
       score = await scoreCase(evalCase, result, answerJudge);

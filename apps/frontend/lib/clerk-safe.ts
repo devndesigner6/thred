@@ -2,24 +2,18 @@ import { useAuth, useClerk, useSignIn, useUser } from "@clerk/nextjs";
 
 export const clerkConfigured = Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY);
 
-// The deployment remains publicly readable while Clerk is being configured.
-// Once the publishable key is present, these delegate to the real Clerk hooks.
-export function useOptionalUser() {
-  if (!clerkConfigured) return { isLoaded: true, isSignedIn: false, user: null };
-  return useUser();
-}
+const unconfiguredUser = { isLoaded: true, isSignedIn: false, user: null };
+const unconfiguredSignIn = { fetchStatus: "idle" as const, signIn: null };
+const unconfiguredClerk = { signOut: async () => undefined };
+const unconfiguredAuth = { getToken: async () => null };
 
-export function useOptionalSignIn() {
-  if (!clerkConfigured) return { fetchStatus: "idle" as const, signIn: null };
-  return useSignIn();
-}
+function useUnconfiguredUser() { return unconfiguredUser; }
+function useUnconfiguredSignIn() { return unconfiguredSignIn; }
+function useUnconfiguredClerk() { return unconfiguredClerk; }
+function useUnconfiguredAuth() { return unconfiguredAuth; }
 
-export function useOptionalClerk() {
-  if (!clerkConfigured) return { signOut: async () => undefined };
-  return useClerk();
-}
-
-export function useOptionalAuth() {
-  if (!clerkConfigured) return { getToken: async () => null };
-  return useAuth();
-}
+// Select once using build-time configuration so hook calls stay unconditional.
+export const useOptionalUser = clerkConfigured ? useUser : useUnconfiguredUser;
+export const useOptionalSignIn = clerkConfigured ? useSignIn : useUnconfiguredSignIn;
+export const useOptionalClerk = clerkConfigured ? useClerk : useUnconfiguredClerk;
+export const useOptionalAuth = clerkConfigured ? useAuth : useUnconfiguredAuth;

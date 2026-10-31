@@ -1,6 +1,6 @@
-import { writeLongTermMemory, type HydraMemoryWriteResponse, type LongTermMemoryInput } from "@repo/hydra";
+import { writeLongTermMemory, type MemoryWriteResponse, type LongTermMemoryInput } from "@repo/memory-store";
 import type { LongTermMemoryClaim } from "@repo/memory-extractor";
-import { buildHydraMemory } from "./graph/graph-builder.js";
+import { buildStoredMemory } from "./graph/graph-builder.js";
 import {
   resolveRevision,
   type ExistingMemory,
@@ -13,7 +13,7 @@ export type MemoryLookup = {
     subject: string;
     predicate: string;
   }): Promise<ExistingMemory[]>;
-  /** Implemented by lookups that track writes before HydraDB finishes indexing. */
+  /** Implemented by lookups that track writes before PostgreSQL finishes indexing. */
   recordWrite?(input: {
     workspaceId: string;
     memoryId: string;
@@ -24,6 +24,7 @@ export type MemoryLookup = {
 };
 
 export type ProcessLongTermClaimInput = {
+  signal?: AbortSignal;
   workspaceId: string;
   sessionId: string;
   evidenceEventIds: string[];
@@ -33,7 +34,7 @@ export type ProcessLongTermClaimInput = {
 
 export type ProcessedLongTermClaim = {
   decision: RevisionDecision;
-  hydraResponse?: HydraMemoryWriteResponse;
+  memoryResponse?: MemoryWriteResponse;
 };
 
 export type ResolvedLongTermClaim = {
@@ -55,7 +56,7 @@ export async function resolveLongTermClaim(
   if (decision.operation === "IGNORE") return { decision };
   return {
     decision,
-    memory: buildHydraMemory(input.claim, decision, {
+    memory: buildStoredMemory(input.claim, decision, {
       workspaceId: input.workspaceId,
       sessionId: input.sessionId,
       evidenceEventIds: input.evidenceEventIds,
@@ -64,13 +65,14 @@ export async function resolveLongTermClaim(
   };
 }
 
-/** Resolves a claim before any HydraDB write, preserving revision history. */
+/** Resolves a claim before any PostgreSQL write, preserving revision history. */
 export async function processLongTermClaim(
   lookup: MemoryLookup,
   input: ProcessLongTermClaimInput,
 ): Promise<ProcessedLongTermClaim> {
   const resolved = await resolveLongTermClaim(lookup, input);
+  input.signal?.throwIfAborted();
   if (!resolved.memory) return { decision: resolved.decision };
-  const hydraResponse = await writeLongTermMemory(resolved.memory);
-  return { decision: resolved.decision, hydraResponse };
+  const memoryResponse = await writeLongTermMemory(resolved.memory);
+  return { decision: resolved.decision, memoryResponse };
 }

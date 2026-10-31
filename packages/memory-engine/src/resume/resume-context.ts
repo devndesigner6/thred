@@ -1,7 +1,7 @@
 import { resumeWork, type ResumeHandoff } from "@repo/working-memory";
-import { buildMemoryContext, type MemoryContext } from "../context/context-builder.js";
+import { buildWorkspaceContext } from "../context/workspace-context.js";
 
-export type ResumeWithMemory = ResumeHandoff & { memoryContext: MemoryContext };
+export type ResumeWithMemory = ResumeHandoff & { memoryContext: Awaited<ReturnType<typeof buildWorkspaceContext>> };
 
 /** Restores operational state and evidence-backed durable context in one handoff. */
 export async function resumeWithMemory(input: {
@@ -14,6 +14,6 @@ export async function resumeWithMemory(input: {
   const query = [handoff.task, handoff.payload.nextStep, ...handoff.payload.filesChanged]
     .filter(Boolean)
     .join(" ");
-  const memoryContext = await buildMemoryContext({ workspaceId: input.workspaceId, query });
+  const memoryContext = await buildWorkspaceContext({ workspaceId: input.workspaceId, query });
   return { ...handoff, memoryContext };
 }

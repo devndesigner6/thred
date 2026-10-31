@@ -1,4 +1,4 @@
-import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
+import { createCipheriv, createHash, randomBytes } from "node:crypto";
 import { NextResponse } from "next/server";
 import { prisma } from "@repo/db";
 import { getCurrentLocalUser } from "@/lib/current-user";
@@ -16,13 +16,6 @@ function encrypt(value: string) {
   const cipher = createCipheriv("aes-256-gcm", encryptionKey(), iv);
   const ciphertext = Buffer.concat([cipher.update(value, "utf8"), cipher.final()]);
   return `${iv.toString("base64url")}.${ciphertext.toString("base64url")}.${cipher.getAuthTag().toString("base64url")}`;
-}
-
-function decrypt(value: string) {
-  const [iv, ciphertext, tag] = value.split(".").map((part) => Buffer.from(part!, "base64url"));
-  const decipher = createDecipheriv("aes-256-gcm", encryptionKey(), iv);
-  decipher.setAuthTag(tag!);
-  return Buffer.concat([decipher.update(ciphertext!), decipher.final()]).toString("utf8");
 }
 
 async function workspaceForRequest(slug: string) {

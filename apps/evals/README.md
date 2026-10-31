@@ -14,7 +14,7 @@ npm run eval --workspace=@repo/evals -- \
 
 The loaders accept source records with `haystack_sessions`/`sessions`, `question`, and `answer` (or canonical Thred eval JSON). Each session must contain `turns`, `messages`, `conversation`, or `dialogue` with a role and text/content field. Results are persisted in Postgres and a timestamped Markdown report is emitted to `apps/evals/reports/`.
 
-Required environment: `DATABASE_URL`, `HYDRA_DB_API_KEY`, and one answer/extraction provider key such as `GROQ_API_KEY` for CLI runs. In the workspace UI, configure provider credentials under **Configure → BYOK providers** instead. Optional: `MEMORY_EXTRACTION_MODEL`, `EVAL_ANSWER_MODEL`.
+Required environment: `DATABASE_URL` and one answer/extraction provider key such as `GROQ_API_KEY` for CLI runs. PostgreSQL stores durable memory and supplies lexical full-text retrieval; application revision links preserve superseded facts. In the workspace UI, configure provider credentials under **Configure → BYOK providers** instead. Optional: `MEMORY_EXTRACTION_MODEL`, `EVAL_ANSWER_MODEL`.
 
 `EVAL_JUDGE_MODEL` optionally selects the shared semantic judge used for answer
 matching. When unset, it uses `EVAL_ANSWER_MODEL`. This is required because

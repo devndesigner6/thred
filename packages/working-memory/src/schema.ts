@@ -15,7 +15,7 @@ export type CheckpointInput = {
   task: string;
   status: CheckpointStatus;
   payload: CheckpointPayload;
-  hydraMemoryIds?: string[];
+  memoryIds?: string[];
 };
 
 const statuses = new Set<CheckpointStatus>(["IN_PROGRESS", "BLOCKED", "DONE"]);
@@ -73,6 +73,6 @@ export function parseCheckpointInput(value: unknown): CheckpointInput {
       blockers: stringList(payload.blockers ?? [], "payload.blockers"),
       nextStep: nextStep ? nextStep.trim() : undefined,
     },
-    hydraMemoryIds: stringList(input.hydraMemoryIds ?? [], "hydraMemoryIds"),
+    memoryIds: stringList(input.memoryIds ?? [], "memoryIds"),
   };
 }

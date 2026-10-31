@@ -14,7 +14,7 @@ const claim = (value: string) => ({
   files: [],
 });
 
-test("a write recorded in this run supersedes even before HydraDB indexes it", async () => {
+test("a write recorded in this run supersedes even before PostgreSQL indexes it", async () => {
   let baseCalls = 0;
   const lookup = new CachedMemoryLookup({
     async findCurrentBySemanticKey(): Promise<ExistingMemory[]> {

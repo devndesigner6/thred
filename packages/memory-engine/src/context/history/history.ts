@@ -1,4 +1,4 @@
-import { recallLongTermMemory } from "@repo/hydra";
+import { recallLongTermMemory } from "@repo/memory-store";
 import { rankMemories, type RankedMemory } from "../rank/ranker.js";
 
 export type MemoryHistory = {

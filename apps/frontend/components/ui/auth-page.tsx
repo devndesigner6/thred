@@ -2,8 +2,7 @@
 
 import { useId, type FormEvent, type ReactNode } from "react";
 import Link from "next/link";
-import Image from "next/image";
-import { ArrowRight, ChevronLeft } from "lucide-react";
+import { ArrowRight, ChevronLeft, Database } from "lucide-react";
 import { SiClaude, SiGoogle } from "react-icons/si";
 import { RiOpenaiFill } from "react-icons/ri";
 import { Button } from "./button";
@@ -59,11 +58,11 @@ export function AuthPage({ mode, error, isSubmitting, onSubmit }: AuthPageProps)
             <ArrowRight className="size-4 shrink-0 text-[#93a099]" strokeWidth={1.5} />
             <div className="grid size-[64px] shrink-0 place-items-center"><ThreadMark bevel className="size-[64px]" /></div>
             <ArrowRight className="size-4 shrink-0 text-[#93a099]" strokeWidth={1.5} />
-            <AgentNode><HydraMark className="size-8" /></AgentNode>
+            <AgentNode><Database aria-label="PostgreSQL workspace memory" className="size-7" /></AgentNode>
             <ArrowRight className="size-4 shrink-0 text-[#93a099]" strokeWidth={1.5} />
             <AgentNode><RiOpenaiFill className="size-7" /></AgentNode>
           </div>
-          <p className="mt-4 text-sm leading-6 text-[#526b58]">One current context stream for every agent that picks up the task.</p>
+          <p className="mt-4 text-sm leading-6 text-[#526b58]">Workspace decisions and checkpoints persist in PostgreSQL for the next agent.</p>
         </div>
       </aside>
 
@@ -136,12 +135,4 @@ function ThreadMark({ className = "", bevel = false }: { className?: string; bev
 
 function AgentNode({ children }: { children: ReactNode }) {
   return <div className="grid size-[64px] shrink-0 place-items-center bevel-tile rounded-[18px] text-[#59625b]">{children}</div>;
-}
-
-function HydraMark({ className = "" }: { className?: string }) {
-  return (
-    <span aria-label="HydraDB" className={`relative block overflow-hidden ${className}`}>
-      <Image src="/hydradb-logo-white.png" alt="" width={1180} height={215} className="absolute left-1/2 top-[9.8%] h-full max-w-none w-auto -translate-x-[7.5%]" />
-    </span>
-  );
 }

@@ -31,7 +31,7 @@ export type TemporalResolution = {
 
 /**
  * Deterministic temporal graph used by the resolver and tests. Production
- * adapters persist the same relation set in HydraDB during ingestion.
+ * adapters persist the same relation set in PostgreSQL during ingestion.
  */
 export class TemporalGraph {
   private readonly memories = new Map<string, TemporalMemory>();

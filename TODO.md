@@ -2,8 +2,9 @@
 
 ## Real evidence-driven Mozaik orchestration
 - [x] A signed-in workspace can submit one goal to the API.
-- [x] The API creates a Mozaik runtime space, joins a human kickoff participant and three agent participants, and sends the kickoff message through the runtime.
-- [x] Three specialized agents—Scout, Verifier, and Red Team—are created through `defineAgentModule` and run through native Mozaik `createLoop`/`runLoop` calls concurrently.
+- [x] The API creates a Mozaik runtime space, joins a human kickoff participant and four agent participants, and sends the kickoff message through the runtime.
+- [x] Four specialized agents—Product, Frontend, Backend, and QA—are created through `defineAgentModule` and run through native Mozaik `createLoop`/`runLoop` calls concurrently.
+- [ ] Complete and verify PostgreSQL-only durable memory and lexical full-text retrieval through `@repo/memory-store`, preserving application-level revision links.
 - [x] The API can attach the official Mozaik Cloud exporter to the same runtime when `MOZAIK_API_KEY` is configured, with redaction and a real session link in the runtime notebook.
 - [x] Each agent can use bounded public URL fetch and DNS lookup tools in addition to Thred memory and shared-board tools, with source metadata and persisted tool events.
 - [x] A single failed agent does not erase completed findings; the run reports partial completion and identifies missing roles.

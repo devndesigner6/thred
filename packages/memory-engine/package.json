@@ -11,7 +11,8 @@
     "test": "tsx --test \"src/**/*.test.ts\""
   },
   "dependencies": {
-    "@repo/hydra": "*",
+    "@repo/db": "*",
+    "@repo/memory-store": "*",
     "@repo/memory-extractor": "*",
     "@repo/working-memory": "*"
   },

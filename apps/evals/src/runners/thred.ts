@@ -4,7 +4,7 @@ import {
   CachedMemoryLookup,
   compactMemoryText,
   deriveQueryIntent,
-  HydraMemoryLookup,
+  StoreMemoryLookup,
   ingestSession,
   type QueryIntent,
 } from "@repo/memory-engine";
@@ -13,21 +13,6 @@ import type { AnswerModel, EvalCase, EvaluatedAnswer } from "../types.js";
 
 function approximateTokens(value: string): number {
   return Math.ceil(value.trim().length / 4);
-}
-
-/** HydraDB indexes asynchronously; retrieving before it settles looks like an empty memory. */
-async function waitForIndexedMemory(workspaceId: string, query: string) {
-  for (let attempt = 0; attempt < 12; attempt += 1) {
-    const probe = await buildMemoryContext({
-      workspaceId,
-      query,
-      maxResults: 3,
-      minRelevancy: 0.1,
-      expandQuery: false,
-    });
-    if (probe.status === "FOUND") return;
-    await new Promise((resolve) => setTimeout(resolve, 1_500));
-  }
 }
 
 /** Temporal and revision questions need the ordered claim history, not just current state. */
@@ -80,9 +65,8 @@ export async function runThred(input: {
   const ingestStart = performance.now();
   let writeTokens = 0;
   const ingestion: Array<{ sessionId: string; extractedClaims: number; writtenClaims: number; decisions: string[] }> = [];
-  // Shared across sessions so a fact revised in a later session still resolves
-  // against the memory it replaces, without waiting for HydraDB to index.
-  const memoryLookup = new CachedMemoryLookup(new HydraMemoryLookup());
+  // Share the lookup across sessions so revisions resolve the fact they replace.
+  const memoryLookup = new CachedMemoryLookup(new StoreMemoryLookup());
   const completed = new Set(input.resume?.completedSessionIds ?? []);
   for (const session of input.evalCase.sessions) {
     writeTokens += approximateTokens(session.messages.map((message) => message.content).join("\n"));
@@ -97,14 +81,12 @@ export async function runThred(input: {
     ingestion.push({
       sessionId: session.id,
       extractedClaims: outcome.extracted.longTerm.length,
-      writtenClaims: outcome.processed.filter((claim) => claim.hydraResponse).length,
+      writtenClaims: outcome.processed.filter((claim) => claim.memoryResponse).length,
       decisions: outcome.processed.map((claim) => claim.decision.operation),
     });
     await input.resume?.onSessionComplete(session.id);
   }
   const ingestLatencyMs = Math.round(performance.now() - ingestStart);
-
-  await waitForIndexedMemory(input.workspaceId, input.evalCase.question);
 
   const retrievalStart = performance.now();
   const needsTimeline = input.evalCase.category === "temporal" || input.evalCase.category === "revision";

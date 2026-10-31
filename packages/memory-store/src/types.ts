@@ -1,10 +1,8 @@
 export type LongTermMemoryKind = "fact" | "decision" | "lesson" | "architecture" | "preference";
-
 export type MemoryRelation = {
   predicate: "ABOUT" | "FROM_SESSION" | "SUPPORTS" | "SUPERSEDES" | "TOUCHED_FILE";
   target: string;
 };
-
 export type LongTermMemoryInput = {
   workspaceId: string;
   sessionId: string;
@@ -14,40 +12,19 @@ export type LongTermMemoryInput = {
   evidenceEventIds?: string[];
   sourceMessageIds?: string[];
   files?: string[];
-  /** Explicit semantic relations supplied by Thred's temporal resolver. */
   relations?: MemoryRelation[];
+  semanticKey?: string;
+  value?: string;
 };
-
-export type RecallLongTermMemoryInput = {
-  workspaceId: string;
-  query: string;
-  maxResults?: number;
-};
-
-/** Stable package boundary; callers do not depend on SDK-generated response types. */
-export type HydraResponse = {
-  data?: unknown;
-  meta?: unknown;
-};
-
-export type HydraMemoryWriteResponse = {
-  data?: {
-    results?: { id?: string }[];
-  };
-};
-
-/** One search result returned by HydraDB recall. */
-export type HydraChunk = {
+export type RecallLongTermMemoryInput = { workspaceId: string; query: string; maxResults?: number };
+export type MemoryWriteResponse = { data?: { results?: { id?: string }[] } };
+export type MemoryChunk = {
   id?: string;
   chunkUuid?: string;
   chunkContent?: string;
   sourceLastUpdatedTime?: string;
   sourceUploadTime?: string;
   relevancyScore?: number;
+  isCurrent?: boolean;
 };
-
-export type HydraMemoryQueryResponse = {
-  data?: {
-    chunks?: HydraChunk[];
-  };
-};
+export type MemoryQueryResponse = { data?: { chunks?: MemoryChunk[] } };

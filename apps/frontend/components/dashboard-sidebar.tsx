@@ -6,7 +6,6 @@ import {
   PixelCheck,
   PixelChevronDown,
   PixelClose,
-  PixelDatabase,
   PixelFolder,
   PixelGear,
   PixelGithub,
@@ -231,16 +230,6 @@ export function DashboardSidebar({
                   active={view === "docs"}
                   onSelect={() => onViewChange("docs")}
                 />
-                <a
-                  href="https://github.com/hydra-db/hydradb"
-                  target="_blank"
-                  rel="noreferrer"
-                  className="dashboard-sidebar-panel-row"
-                  title="External memory"
-                >
-                  <PixelDatabase className="size-[18px] shrink-0 text-[#1a1d19]" />
-                  <span className="min-w-0 truncate">External memory</span>
-                </a>
                 <a
                   href="https://github.com/devndesigner6/thred"
                   target="_blank"

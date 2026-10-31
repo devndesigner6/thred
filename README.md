@@ -1,71 +1,31 @@
-# Thred
+# Thred — Mozaik Studio
 
-**Revision-aware, cross-session memory for AI agents.**
+Studio turns a product goal into a coordinated implementation plan. Four concurrent Mozaik agents—product, frontend, backend, and QA—read and write a shared, versioned artifact board. QA reviews the latest artifacts before final synthesis. Thred persists runs and coding handoffs for another session or MCP client.
 
-Thred is a durable memory layer for agents working across Cursor, Claude Code,
-Codex, and OpenCode. It turns long, fragmented chat histories into verifiable
-memory: decisions, facts, preferences, source evidence, revisions, and
-resumable coding handoffs.
+**Studio produces plans, contracts, and review evidence. It does not execute code, edit repositories, or deploy applications.** The original Thred MCP memory tools remain available.
 
-**[Get started → thred.fun](https://www.thred.fun)** · [MIT License](LICENSE)
+## Run locally
 
-## The problem
+Use Node.js **24+**, npm **10+**, PostgreSQL, a Clerk application with Google sign-in enabled, and an OpenAI API key. Install Node 24 using your platform installer or version manager. Create a database with your platform's PostgreSQL tools (`createdb thred`); Docker PostgreSQL is an optional alternative.
 
-Cross-session agent work breaks down when the relevant information is spread
-across dozens of conversations. Long-running projects can span 30–40 sessions
-and more than 115K tokens per question. A useful memory layer has to do more
-than retrieve semantically similar text:
-
-- combine facts from many sessions while retaining chronology;
-- represent facts that changed or were overwritten;
-- show where an answer came from; and
-- return `NOT_FOUND` when the answer is not supported by the history.
-
-Copy-pasting the last session into the next prompt works for a short handoff,
-but not across dozens of sessions: the context window fills up, older facts get
-missed, and agents confuse superseded decisions with current ones. Thred fixes
-that with atomic, provenance-backed facts, explicit revision history, and
-honest abstention when the evidence isn't there.
-
-## Features
-
-Thred exposes a small MCP toolset. Use the same memory from any agent client:
-
-| Tool                | What it does                                                                                 |
-| ------------------- | -------------------------------------------------------------------------------------------- |
-| `thread_context`    | Retrieves verified long-term context; `includeHistory` returns every revision, oldest first. |
-| `thread_checkpoint` | Saves coding progress and extracts durable long-term memory from a session.                  |
-| `thread_resume`     | Restores the latest unfinished coding checkpoint with relevant context.                      |
-
-Save "we chose PostgreSQL" in one session. Update to "we chose Neon Postgres" in
-another. Ask what’s true now, or why it changed, in a third. Nothing gets
-silently erased.
-
-## Quick start
-
-### 1. Connect an MCP client
-
-Create an agent key at [thred.fun](https://www.thred.fun), then add this to
-Cursor, Claude Code, Codex, or OpenCode:
-
-```json
-{
-  "mcpServers": {
-    "thred": {
-      "command": "npx",
-      "args": ["-y", "@thred_nick_01/thred-mcp"],
-      "env": {
-        "THRED_API_KEY": "thrd_sk_…",
-        "THRED_API_URL": "https://api.thred.fun"
-      }
-    }
-  }
-}
+```bash
+cp .env.example .env
 ```
 
-Use the same key across clients to share one workspace memory.
+PowerShell users can use `Copy-Item .env.example .env`. Configure the root `.env`:
 
-### 2. Run locally (optional)
+| Variable | Purpose |
+| --- | --- |
+| `DATABASE_URL` | PostgreSQL connection string |
+| `CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY` | API authentication, from the same Clerk application |
+| `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` | Frontend key from that application |
+| `OPENAI_API_KEY` | Required for Studio's OpenAI adapter |
+| `MOZAIK_MODEL` | Configurable OpenAI model; default `gpt-5.4-mini` |
+| `CREDENTIAL_ENCRYPTION_SECRET` | Random secret of at least 32 characters |
+| `FRONTEND_ORIGIN` | `http://localhost:3000` locally |
+| `NEXT_PUBLIC_API_URL` | `http://localhost:8080` locally |
+
+Other provider settings apply to extraction/evaluations; Studio currently uses OpenAI. PostgreSQL stores all durable memory, checkpoints, and run history. Retrieval ranks up to 200 matching records lexically; it does not use vector embeddings. Indexed semantic keys, transactional current-version updates, and `SUPERSEDES` links preserve revisions.
 
 ```bash
 npm install
@@ -74,63 +34,88 @@ npm run db:migrate --workspace=@repo/db
 npm run dev
 ```
 
-**Prerequisites:** Node.js 18+, PostgreSQL, a Clerk application with Google enabled, a HydraDB API key, and Groq or OpenAI.
+Alternatively start each app in a separate terminal:
 
-| Variable                                   | Required for                    | Notes                                             |
-| ------------------------------------------ | ------------------------------- | ------------------------------------------------- |
-| `DATABASE_URL`                             | API, frontend, evaluations      | PostgreSQL connection string.                     |
-| `HYDRA_DB_API_KEY`                         | API, memory engine, evaluations | HydraDB access token.                             |
-| `OPENAI_API_KEY` or `GROQ_API_KEY`         | Extraction and evaluations      | Configure at least one provider.                  |
-| `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY` | Clerk authentication | Clerk application keys. |
-| `FRONTEND_ORIGIN`                          | Express API CORS and Clerk     | Local default is `http://localhost:3000`.         |
-| `CREDENTIAL_ENCRYPTION_SECRET`              | BYOK provider credentials      | Random secret with at least 32 characters.        |
-| `PORT`, `NEXT_PUBLIC_API_URL`              | Local development               | Optional API port and frontend API URL overrides. |
+```bash
+npm run dev --workspace=api
+```
 
-Configure Google as a social connection inside the Clerk dashboard. For MCP
-clients, configure `THRED_API_KEY`; `THRED_API_URL` defaults to the production
-API.
+```bash
+npm run dev --workspace=frontend
+```
 
-## How it works
+Open [localhost:3000](http://localhost:3000), sign in, create/select a workspace, and open Studio. See [Clerk deployment setup](CLERK_DEPLOYMENT.md). Never publish keys or include credentials in goals.
 
-1. Agent sessions are processed into atomic, evidence-backed claims.
-2. Claims are stored with workspace, session, source-message, entity, and file
-   provenance.
-3. When a claim changes, Thred writes an explicit `SUPERSEDES` link to the
-   prior claim.
-4. At query time, hybrid retrieval and graph context surface candidate evidence.
-5. A temporal resolver returns current or historical facts as requested.
-6. Insufficient evidence → `NOT_FOUND`, not a guess.
+## Judge walkthrough
 
-Built on [HydraDB](https://github.com/hydra-db/hydradb) for graph-backed storage
-with hybrid retrieval, so revision history and provenance are first-class, not
-bolted onto a vector store.
+1. Submit: **“Plan event registration for 100 attendees. Collect name and email only; no phone numbers. Coordinate frontend fields, the backend contract, capacity handling, and QA acceptance checks.”**
+2. Watch the four named agent loops and interleaved shared-board tool events. Agents coordinate a registration contract; exact tool ordering and any contract mismatch depend on the model. A particular disagreement is not guaranteed.
+3. Inspect board versions, QA evidence, and final synthesis. Completion requires review of the latest artifacts; edits invalidate stale review evidence.
+4. Reopen the persisted run and inspect its evidence. Restore its coding handoff through MCP `thread_resume` in another session, then save progress with `thread_checkpoint`. This demonstrates a durable planning handoff, not automatic implementation.
+5. Cancel a running attempt and inspect its terminal state. After process restart, interrupted work remains visible; agent execution does not automatically resume.
 
-## Benchmarks
+## Architecture and limits
 
-Evaluated against a hashed-vector RAG baseline on
-[LongMemEval](https://github.com/xiaowu0162/LongMemEval),
-[LongMemEval V2](https://github.com/xiaowu0162/LongMemEval-V2), and
-[BEAM](https://github.com/mohammadtavakoli78/BEAM).
+```mermaid
+flowchart LR
+  UI[Studio frontend] --> API[Authenticated API]
+  API --> M[Mozaik runtime]
+  M --> P[Product]
+  M --> F[Frontend]
+  M --> B[Backend]
+  M --> Q[QA]
+  P & F & B & Q <--> Board[Versioned shared board]
+  Board --> Gate[Latest-artifact review gate]
+  Gate --> S[Final synthesis]
+  API --> DB[(PostgreSQL snapshots and checkpoints)]
+  DB <--> MCP[Thred MCP checkpoint and resume]
+  M -. optional .-> Cloud[Mozaik Cloud]
+```
 
-| Evaluation                | Vector-RAG |  Thred | What it demonstrates                                                               |
-| ------------------------- | ---------: | -----: | ---------------------------------------------------------------------------------- |
-| LongMemEval V2 scale case |     100.0% | 100.0% | Correct temporal answer across 44 sessions / ~128K tokens; zero evaluation errors. |
+The API exposes runtime capabilities and cancellation. Each workspace permits one active run, with a five-minute deadline and a 48-tool-call budget per agent. Run **one API instance** until execution moves to a shared job worker. PostgreSQL, Clerk, and OpenAI must be reachable. Treat source material as untrusted: URL filtering limits fetching but does not make external text trustworthy.
 
-Full reports in [`apps/evals/reports`](apps/evals/reports).
+Optional Cloud telemetry uses `MOZAIK_API_KEY` and `MOZAIK_PROJECT_ID` from the same Mozaik Cloud account, with `MOZAIK_REDACTION=content`. Configure them privately and keep credentials out of screenshots. Cloud is optional and telemetry delivery is separate from local persistence.
+
+## Original MCP tools
+
+| Tool | Purpose |
+| --- | --- |
+| `thread_context` | Retrieve workspace memory, optionally with revision history |
+| `thread_checkpoint` | Save coding progress and a durable handoff |
+| `thread_resume` | Restore the latest unfinished coding checkpoint |
+
+Create a workspace agent key in the dashboard and configure your MCP client:
+
+```json
+{
+  "mcpServers": {
+    "thred": {
+      "command": "npx",
+      "args": ["-y", "@thred_nick_01/thred-mcp"],
+      "env": {
+        "THRED_API_KEY": "<workspace agent key>",
+        "THRED_API_URL": "http://localhost:8080"
+      }
+    }
+  }
+}
+```
+
+Use the same workspace key across clients. For a hosted instance replace the API URL with its deployed address.
+
+## Verification and evaluation scope
 
 ```bash
 npm test
+npm run check-types --workspace=api
+npm run check-types --workspace=frontend
+npm run build
 ```
 
-Or run individual suites:
+Live Studio verification also requires configured Clerk and OpenAI credentials. Automated checks do not establish model quality or production readiness.
 
-```bash
-npm run test --workspace=@repo/evals
-npm run test --workspace=@repo/memory-extractor
-npm run test --workspace=@repo/memory-engine
-npm run test --workspace=@thred_nick_01/thred-mcp
-```
+For a real database and HTTP MCP check, apply migrations to a disposable PostgreSQL database, set `THRED_VERIFY_DATABASE_URL` to its connection string, and run `npm run verify:memory`. The check writes and cleans up only its own verification namespace. It verifies writes, revisions, isolation, current/history retrieval, and checkpoint resume without model credentials.
 
-## Tech stack
+Historical reports are in [apps/evals/reports](apps/evals/reports). The LongMemEval V2 scale result covers **one case** (44 sessions, about 128K tokens): both Thred and the hashed-vector baseline scored 100%. This does not establish broad superiority, benchmark-wide accuracy, or production memory quality.
 
-TypeScript · Node.js · Express · Next.js · React · MCP · HydraDB · Prisma/PostgreSQL · OpenAI/Groq
+TypeScript · Next.js · Express · Mozaik · MCP · Prisma/PostgreSQL. [MIT license](LICENSE).

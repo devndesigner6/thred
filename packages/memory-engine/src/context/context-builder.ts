@@ -1,4 +1,4 @@
-import { recallLongTermMemory } from "@repo/hydra";
+import { recallLongTermMemory } from "@repo/memory-store";
 import { shouldAbstain } from "./abstain/abstention.js";
 import { compactMemoryText } from "./text/memory-text.js";
 import { deriveQueryIntent, expansionQueries } from "./rank/query-intent.js";
@@ -77,10 +77,10 @@ export async function buildMemoryContext(input: {
     });
   }
   // A newer memory that explicitly supersedes another returned candidate wins.
-  // We retain the old memory in HydraDB for history, but do not expose it as
+  // We retain the old memory in PostgreSQL for history, but do not expose it as
   // current context by default.
   const superseded = new Set(ranked.flatMap((memory) => memory.supersedesMemoryIds));
-  const memories = ranked.filter((memory) => !superseded.has(memory.id));
+  const memories = ranked.filter((memory) => memory.isCurrent !== false && !superseded.has(memory.id));
   const abstention = shouldAbstain(memories, { minRelevancy: input.minRelevancy });
 
   if (abstention.abstain) {

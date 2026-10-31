@@ -1,10 +1,10 @@
 # memory-engine
 
-Brain after the MCP route. Does not talk to Cursor directly. `@repo/memory-extractor` does the LLM. `@repo/hydra` and `@repo/working-memory` do the actual saves.
+Brain after the MCP route. Does not talk to Cursor directly. `@repo/memory-extractor` does the LLM. `@repo/memory-store` and `@repo/working-memory` do the actual saves.
 
 | Folder | Tool | Job |
 |---|---|---|
-| `src/checkpoint/` | `thread_checkpoint` | Save: `long-term/` → HydraDB, `short-term/` → Postgres |
+| `src/checkpoint/` | `thread_checkpoint` | Save: `long-term/` → PostgreSQL, `short-term/` → Postgres |
 | `src/context/` | `thread_context` | Find + rank memories (`rank/`, `abstain/`, `text/`, `history/`) |
 | `src/resume/` | `thread_resume` | Latest unfinished task + related facts |
 | `src/shared/` | both | `entity/` keys + `temporal/` graph model |

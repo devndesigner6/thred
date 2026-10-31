@@ -2,13 +2,7 @@ import { memorySemanticKey } from "../../../shared/entity/entity-resolver.js";
 import type { MemoryLookup } from "../engine.js";
 import type { ExistingMemory } from "../revision/revision-resolver.js";
 
-/**
- * HydraDB indexes writes asynchronously, so a fact revised a few claims later in
- * the same run would not find the memory it replaces and would be stored as an
- * unrelated ADD. This write-through cache makes revision resolution immediate
- * and deterministic across a whole conversation, and skips one recall per claim
- * whose semantic key was already written.
- */
+/** Reuses resolved claims within one ingestion batch while preserving revision order. */
 export class CachedMemoryLookup implements MemoryLookup {
   private readonly base: MemoryLookup;
   private readonly current = new Map<string, ExistingMemory>();
